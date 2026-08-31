@@ -1,0 +1,11 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "provider": "staticfile",
+  "steps": {
+    "static": {
+      "assets": {
+        "Staticfile": "root: .\n"
+      }
+    }
+  }
+}

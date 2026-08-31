@@ -25,6 +25,8 @@ Then open http://localhost:8000.
 
 ## Deploy
 
-Railway builds the `Dockerfile`, which serves the HTML files with Caddy on
-`$PORT`. `try_files` maps extensionless URLs to their `.html` file, so
-`/contact` and `/contact.html` both work.
+Railway builds the repo with Railpack's static provider, which serves the HTML
+files directly. There is no Docker image and no Node toolchain involved.
+
+Extensionless URLs resolve to their `.html` file, so `/contact` and
+`/contact.html` both work.
