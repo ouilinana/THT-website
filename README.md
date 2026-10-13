@@ -44,3 +44,14 @@ python3 -m http.server 8000
 Railway builds the `Dockerfile`, which serves `/srv` with Caddy on `$PORT`. Extensionless URLs map to `.html` files via `try_files`.
 
 See `docs/I18N.md` for the bilingual URL plan.
+
+### Refreshing FLEUR photos
+
+Source photos (LeDockerNoir) live in [this Drive folder](https://drive.google.com/drive/folders/1eaQWj-NYBE0b3p4_UEMfmSZHbWsa1G0E). Download locally (not committed), then:
+
+```sh
+pip install gdown pillow
+gdown --folder "https://drive.google.com/drive/folders/1eaQWj-NYBE0b3p4_UEMfmSZHbWsa1G0E" -O /tmp/fleur-drive
+python3 scripts/optimize_fleur_from_drive.py /tmp/fleur-drive
+python3 scripts/build_site.py
+```

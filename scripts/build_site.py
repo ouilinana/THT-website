@@ -25,16 +25,20 @@ PAGES = [
     "contact.html",
 ]
 
+CEC_PDF = "/assets/docs/THT_Cherche-en-corps_01_presentation.pdf"
+FLEUR_DIR = "/assets/images/fleur"
+FLEUR_HERO = f"{FLEUR_DIR}/hero.webp"
+FLEUR_OG = f"{SITE_URL}{FLEUR_DIR}/og-fleur.webp"
+FLEUR_GALLERY = [f"{FLEUR_DIR}/g{i:02d}.webp" for i in range(1, 9)]
+
 WP_REPLACEMENTS = {
     "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-114-scaled.jpg": "/assets/images/windows-hero.webp",
-    "https://www.trois-heures-trente.com/wp-content/uploads/2023/08/Ouili_fleur-63-scaled.jpg": "/assets/images/fleur-tile.webp",
+    "https://www.trois-heures-trente.com/wp-content/uploads/2023/08/Ouili_fleur-63-scaled.jpg": f"{FLEUR_DIR}/tile.webp",
     "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-241-scaled.jpg": "/assets/images/cherche-tile.webp",
-    "https://www.trois-heures-trente.com/wp-content/uploads/2023/08/Ouili_fleur-52-2-scaled.jpg": "/assets/images/fleur-hero.webp",
+    "https://www.trois-heures-trente.com/wp-content/uploads/2023/08/Ouili_fleur-52-2-scaled.jpg": FLEUR_HERO,
     "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-329-scaled.jpg": "/assets/images/windows-hero.webp",
     "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/Portrait-de-CEC-FR-Presentation-1-768x1024.png": "/assets/docs/THT_Cherche-en-corps_01_presentation.pdf",
 }
-
-CEC_PDF = "/assets/docs/THT_Cherche-en-corps_01_presentation.pdf"
 
 PAGE_META: dict[str, dict[str, str]] = {
     "index.html": {
@@ -380,15 +384,36 @@ def fix_dossier_links(html: str, page: str) -> str:
     return html
 
 
-def fix_pronouns(html: str) -> str:
-    # Ouili Nana uses he/him (EN bios).
-    html = html.replace(
-        "creative process and the [REDACTED] of Cherche en corps",
-        "creative process and the making of Cherche en Corps",
+def apply_fleur_images(html: str) -> str:
+    """Hero + gallery from LeDockerNoir photos (assets/images/fleur/)."""
+    html = re.sub(
+        r'(<div style="position:relative;height:620px;overflow:hidden[^"]*">\s*)'
+        r'<img src="[^"]+" alt="FLEUR[^"]*" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">',
+        rf'\1<img src="{FLEUR_HERO}" alt="FLEUR — Ouili Nana" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">',
+        html,
+        count=1,
     )
-    html = html.replace(
-        "creative process and the NODE_ENV of Cherche en corps",
-        "creative process and the making of Cherche en Corps",
+    gallery_imgs = "".join(
+        f'<img src="{src}" alt="FLEUR — LeDockerNoir" style="width:100%;aspect-ratio:4/5;object-fit:cover;display:block">'
+        for src in FLEUR_GALLERY
+    )
+    html = re.sub(
+        r'<div style="display:grid;grid-template-columns:repeat\(4,1fr\);gap:1px;background:rgba\(233,236,242,.12\);border-top:1px solid rgba\(233,236,242,.12\);border-bottom:1px solid rgba\(233,236,242,.12\)">\s*'
+        r'(?:<img src="[^"]+" alt="FLEUR[^"]*" style="width:100%;aspect-ratio:4/5;object-fit:cover;display:block">\s*)+'
+        r"</div>",
+        f'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:rgba(233,236,242,.12);border-top:1px solid rgba(233,236,242,.12);border-bottom:1px solid rgba(233,236,242,.12)">{gallery_imgs}</div>',
+        html,
+        count=1,
+    )
+    return html
+
+
+def fix_pronouns(html: str) -> str:
+    # Bundler artifact in EN ateliers copy; Ouili Nana uses he/him elsewhere.
+    html = re.sub(
+        r"creative process and the .{1,48}? of Cherche en [Cc]orps\.?",
+        "creative process and the making of Cherche en Corps.",
+        html,
     )
     return html
 
@@ -403,7 +428,10 @@ def head_block(page: str, lang: str, styles: str) -> str:
     canonical = SITE_URL + path
     alt_fr = SITE_URL + (f"/{slug}" if slug != "index" else "/")
     alt_en = SITE_URL + (f"/en/{slug}" if slug != "index" else "/en/")
-    og_image = f"{SITE_URL}/assets/images/og-default.webp"
+    if page == "fleur.html":
+        og_image = FLEUR_OG
+    else:
+        og_image = f"{SITE_URL}/assets/images/og-default.webp"
     lang_attr = "fr" if lang == "fr" else "en"
     return f"""<!DOCTYPE html>
 <html lang="{lang_attr}">
@@ -459,6 +487,11 @@ def build_page(page: str, lang: str, body: str, styles: str) -> str:
     if page == "cherche-en-corps.html":
         html = fix_cherche_videos(html, lang)
     elif page == "index.html":
+        html = re.sub(
+            r'(<a href="/fleur"[^>]*><img src=")[^"]+(" alt="FLEUR")',
+            rf'\1{FLEUR_DIR}/tile.webp\2',
+            html,
+        )
         html = html.replace(
             "▶ Cherche en Corps à San Francisco",
             "▶ Cherche en Corps — teaser",
@@ -473,6 +506,8 @@ def build_page(page: str, lang: str, body: str, styles: str) -> str:
         )
     html = fix_dossier_links(html, page)
     html = fix_pronouns(html)
+    if page == "fleur.html":
+        html = apply_fleur_images(html)
     return head_block(page, lang, styles) + html + "\n</body>\n</html>\n"
 
 
