@@ -287,32 +287,89 @@ def replace_remaining_wp_images(html: str) -> str:
     return html
 
 
-def fix_newsletter(html: str, lang: str) -> str:
-    pattern = re.compile(
-        r'<div style="display:flex;justify-content:space-between;align-items:center;gap:40px;padding:36px 44px;border-bottom:1px solid rgba\(233,236,242,.12\)">\s*'
-        r'<div style="display:flex;flex-direction:column;gap:6px">.*?'
-        r'<div style="display:flex;gap:0">.*?</div>\s*</div>',
-        re.DOTALL,
-    )
+def newsletter_block(lang: str) -> str:
     if lang == "fr":
-        repl = (
-            '<div style="display:flex;justify-content:space-between;align-items:center;gap:40px;padding:36px 44px;border-bottom:1px solid rgba(233,236,242,.12)">'
-            '<div style="display:flex;flex-direction:column;gap:6px">'
-            '<span style="font:400 26px \'Bebas Neue\',sans-serif;letter-spacing:.05em">Nous écrire</span>'
-            '<span style="font:400 11px \'IBM Plex Mono\',monospace;color:rgba(233,236,242,.55)">'
-            "Dates, créations, diffusion: écrivez-nous directement.</span></div>"
-            '<a href="mailto:contact@trois-heures-trente.com" style="background:#5ec9ff;color:#08090c;padding:12px 22px;text-decoration:none;font:500 12px \'IBM Plex Mono\',monospace">contact@trois-heures-trente.com</a></div>'
+        title, sub = "Restez dans la boucle", "Dates, créations, battles: quelques mails par saison."
+        l_name, l_email, l_city, l_org = "Nom", "Adresse e-mail", "Ville (facultatif)", "Organisation (facultatif)"
+        consent = (
+            "J'accepte que mes données (nom, e-mail, ville et organisation) soient enregistrées "
+            "pour recevoir la newsletter de la Compagnie THT. Je peux retirer mon consentement "
+            "à tout moment via contact@trois-heures-trente.com (RGPD)."
         )
+        btn, loading = "S'inscrire", "Envoi…"
+        ok, err = "Merci, vous êtes inscrit·e.", "Impossible de finaliser l'inscription. Réessayez ou écrivez-nous."
     else:
-        repl = (
-            '<div style="display:flex;justify-content:space-between;align-items:center;gap:40px;padding:36px 44px;border-bottom:1px solid rgba(233,236,242,.12)">'
-            '<div style="display:flex;flex-direction:column;gap:6px">'
-            '<span style="font:400 26px \'Bebas Neue\',sans-serif;letter-spacing:.05em">Get in touch</span>'
-            '<span style="font:400 11px \'IBM Plex Mono\',monospace;color:rgba(233,236,242,.55)">'
-            "Tour dates, projects, booking: email us directly.</span></div>"
-            '<a href="mailto:contact@trois-heures-trente.com" style="background:#5ec9ff;color:#08090c;padding:12px 22px;text-decoration:none;font:500 12px \'IBM Plex Mono\',monospace">contact@trois-heures-trente.com</a></div>'
+        title, sub = "Stay in the loop", "Tour dates, new work, a few emails per season."
+        l_name, l_email, l_city, l_org = "Name", "Email address", "City (optional)", "Organisation (optional)"
+        consent = (
+            "I agree that my details (name, email, city, organisation) may be stored to send me "
+            "THT Company news. I can withdraw consent anytime at contact@trois-heures-trente.com (GDPR)."
         )
-    return pattern.sub(repl, html)
+        btn, loading = "Subscribe", "Sending…"
+        ok, err = "Thank you, you are subscribed.", "We could not complete signup. Please try again or email us."
+    field = (
+        "width:100%;background:transparent;border:1px solid rgba(233,236,242,.35);"
+        "color:#e9ecf2;padding:12px 14px;font:400 12px 'IBM Plex Mono',monospace;outline:none"
+    )
+    return (
+        f'<section id="newsletter" aria-labelledby="newsletter-title" '
+        f'style="padding:36px 44px;border-bottom:1px solid rgba(233,236,242,.12);background:#08090c;color:#e9ecf2">'
+        f'<div style="display:grid;grid-template-columns:1fr 1.2fr;gap:40px;align-items:start">'
+        f'<div style="display:flex;flex-direction:column;gap:8px">'
+        f'<h2 id="newsletter-title" style="margin:0;font:400 26px \'Bebas Neue\',sans-serif;letter-spacing:.05em">{title}</h2>'
+        f'<p style="margin:0;font:400 11px \'IBM Plex Mono\',monospace;color:rgba(233,236,242,.55)">{sub}</p></div>'
+        f'<form action="/api/subscribe" method="post" data-newsletter-form '
+        f'data-msg-success="{ok}" data-msg-error="{err}" style="display:flex;flex-direction:column;gap:14px;margin:0">'
+        f'<input type="hidden" name="lang" value="{lang}">'
+        f'<div style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden" aria-hidden="true">'
+        f'<label for="nl-hp-{lang}">Leave blank</label>'
+        f'<input id="nl-hp-{lang}" name="company_website" type="text" tabindex="-1" autocomplete="off"></div>'
+        f'<div><label for="nl-name-{lang}" style="display:block;font:400 10px \'IBM Plex Mono\',monospace;color:#5ec9ff;margin-bottom:6px;letter-spacing:.08em">{l_name} *</label>'
+        f'<input id="nl-name-{lang}" name="name" type="text" required autocomplete="name" style="{field}"></div>'
+        f'<div><label for="nl-email-{lang}" style="display:block;font:400 10px \'IBM Plex Mono\',monospace;color:#5ec9ff;margin-bottom:6px;letter-spacing:.08em">{l_email} *</label>'
+        f'<input id="nl-email-{lang}" name="email" type="email" required autocomplete="email" style="{field}"></div>'
+        f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'
+        f'<div><label for="nl-city-{lang}" style="display:block;font:400 10px \'IBM Plex Mono\',monospace;color:rgba(233,236,242,.6);margin-bottom:6px">{l_city}</label>'
+        f'<input id="nl-city-{lang}" name="city" type="text" autocomplete="address-level2" style="{field}"></div>'
+        f'<div><label for="nl-org-{lang}" style="display:block;font:400 10px \'IBM Plex Mono\',monospace;color:rgba(233,236,242,.6);margin-bottom:6px">{l_org}</label>'
+        f'<input id="nl-org-{lang}" name="organisation" type="text" autocomplete="organization" style="{field}"></div></div>'
+        f'<label style="display:flex;gap:10px;align-items:flex-start;font:400 11px/1.5 \'IBM Plex Mono\',monospace;color:rgba(233,236,242,.65);cursor:pointer">'
+        f'<input name="consent" type="checkbox" value="1" required style="margin-top:3px">'
+        f'<span>{consent}</span></label>'
+        f'<button type="submit" data-loading="{loading}" '
+        f'style="align-self:flex-start;background:#5ec9ff;color:#08090c;border:0;padding:12px 24px;'
+        f'font:500 12px \'IBM Plex Mono\',monospace;cursor:pointer">{btn}</button>'
+        f'<p data-newsletter-status hidden style="margin:0;font:400 12px \'IBM Plex Mono\',monospace"></p>'
+        f"</form></div></section>"
+        f'<script src="/assets/js/newsletter.js" defer></script>'
+    )
+
+
+def fix_newsletter(html: str, lang: str) -> str:
+    block = newsletter_block(lang)
+    patterns = [
+        re.compile(
+            r'<div style="display:flex;justify-content:space-between;align-items:center;gap:40px;padding:36px 44px;border-bottom:1px solid rgba\(233,236,242,.12\)">.*?</div>',
+            re.DOTALL,
+        ),
+        re.compile(
+            r'<div style="display:flex;justify-content:space-between;align-items:center;gap:40px;padding:36px 44px;border-bottom:1px solid rgba\(233,236,242,.12\)">\s*'
+            r'<div style="display:flex;flex-direction:column;gap:6px">.*?'
+            r'<div style="display:flex;gap:0">.*?</div>\s*</div>',
+            re.DOTALL,
+        ),
+    ]
+    for pat in patterns:
+        if pat.search(html):
+            html = pat.sub(block, html, count=1)
+            break
+    html = re.sub(
+        r'<div style="display:flex;gap:0"><input placeholder="[^"]*".*?</div>\s*',
+        "",
+        html,
+        count=1,
+    )
+    return html
 
 
 def fix_cherche_videos(html: str, lang: str) -> str:

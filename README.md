@@ -24,19 +24,48 @@ python3 scripts/build_site.py
 
 This extracts images/fonts into `assets/`, writes static FR/EN pages, and updates `sitemap.xml` / `robots.txt`.
 
-## Local preview
+## Newsletter API
 
-With Caddy (matches production routing):
+The home page form posts to `POST /api/subscribe`. The Docker image runs Caddy (static files) and a small Python API on `127.0.0.1:8000`.
+
+Copy `.env.example` to `.env` for local runs (never commit secrets).
+
+| Variable | Purpose |
+| --- | --- |
+| `NOTION_TOKEN` | Notion integration secret |
+| `NOTION_DATABASE_ID` | `THT Contacts` database (`9e4d3dbc496e4074b8dc5975f1fc398d`) |
+| `SMTP_*` | Infomaniak SMTP (SSL 465) for notification mail |
+| `NOTIFY_TO` | Inbox for alerts (e.g. `compagnie.tht@gmail.com`) |
+| `SUBSCRIBE_TEST_MODE=1` | Skip Notion/SMTP (tests / dry run) |
+
+### Notion setup
+
+1. Create an integration at [Notion integrations](https://www.notion.so/my-integrations).
+2. Open the **THT Contacts** database and **Connect** the integration (full access).
+3. Set `NOTION_TOKEN` and `NOTION_DATABASE_ID` on Railway.
+
+The API reads the database schema at runtime (title **Name**, **Email**, optional **Country/City**, **Organisation**, **Source**, **Relationship**, **Notes**). If select options for website signup are missing, details are appended to **Notes**. Duplicate emails are skipped.
+
+### Local preview
+
+With Docker (Caddy + API):
 
 ```sh
 docker build -t tht-site .
-docker run --rm -p 8080:8080 tht-site
+docker run --rm -p 8080:8080 --env-file .env tht-site
 ```
 
-Or plain Python (requires `.html` in URLs):
+Tests:
 
 ```sh
-python3 -m http.server 8000
+SUBSCRIBE_TEST_MODE=1 python3 -m unittest discover -s tests -v
+curl -X POST http://127.0.0.1:8000/api/subscribe -d "name=Test&email=t@example.com&consent=1&lang=fr"
+```
+
+Static-only fallback (form POST will not reach API):
+
+```sh
+python3 -m http.server 8080
 ```
 
 ## Deploy
