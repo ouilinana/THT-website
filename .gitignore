@@ -2,3 +2,5 @@
 node_modules/
 .env
 .claude/worktrees/
+assets/_raw/
+legacy/bundles/
