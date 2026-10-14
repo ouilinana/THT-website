@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Optimize WINDOWS stills (from OneDrive video frames or local JPGs) into assets/images/windows/."""
+"""Optimize WINDOWS photos (Photos JAY / OneDrive) into assets/images/windows/."""
 
 from __future__ import annotations
 
@@ -13,19 +13,20 @@ OUT = ROOT / "assets" / "images" / "windows"
 TARGET_KB = 200
 MAX_WIDTH = 1600
 
-# hero/og from strong wide frame; gallery order
-FRAMES = [
-    ("hero", "t88.jpg"),
-    ("og-windows", "t88.jpg"),
-    ("g01", "t12.jpg"),
-    ("g02", "t28.jpg"),
-    ("g03", "t45.jpg"),
-    ("g04", "t62.jpg"),
-    ("g05", "t110.jpg"),
-    ("g06", "t135.jpg"),
-    ("g07", "t168.jpg"),
-    ("g08", "t195.jpg"),
+# Matches legacy WP hero slot (THT-114-scaled → THT-100.jpg; 114 not in Jay set)
+FILES = [
+    ("hero", "THT-100.jpg"),
+    ("og-windows", "THT-100.jpg"),
+    ("g01", "THT-1.jpg"),
+    ("g02", "THT-23.jpg"),
+    ("g03", "THT-26.jpg"),
+    ("g04", "THT-101.jpg"),
+    ("g05", "THT-190.jpg"),
+    ("g06", "THT-220.jpg"),
+    ("g07", "THT-250.jpg"),
+    ("g08", "THT-278.jpg"),
 ]
+TILE = "THT-103.jpg"
 
 
 def save_webp(im: Image.Image, dest: Path, target_kb: int = TARGET_KB) -> int:
@@ -42,11 +43,11 @@ def save_webp(im: Image.Image, dest: Path, target_kb: int = TARGET_KB) -> int:
 
 
 def main() -> int:
-    src_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("/tmp/windows-onedrive/frames")
+    src_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("/tmp/windows-photos-jay")
     if not src_dir.is_dir():
         print(f"Missing source dir: {src_dir}", file=sys.stderr)
         return 1
-    for slug, name in FRAMES:
+    for slug, name in FILES:
         src = src_dir / name
         if not src.exists():
             print(f"Missing {src}", file=sys.stderr)
@@ -55,7 +56,10 @@ def main() -> int:
             out = OUT / f"{slug}.webp"
             size = save_webp(im, out)
             print(f"{out.name}: {size // 1024} KB")
-    tile_src = src_dir / "t45.jpg"
+    tile_src = src_dir / TILE
+    if not tile_src.exists():
+        print(f"Missing {tile_src}", file=sys.stderr)
+        return 1
     with Image.open(tile_src) as im:
         save_webp(im, OUT / "tile.webp")
     print(f"tile.webp: {(OUT / 'tile.webp').stat().st_size // 1024} KB")

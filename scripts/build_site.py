@@ -470,8 +470,8 @@ def apply_fleur_images(html: str) -> str:
     return html
 
 
-def apply_windows_images(html: str) -> str:
-    """Hero + gallery from OneDrive WINDOWS material (assets/images/windows/)."""
+def apply_windows_images(html: str, lang: str) -> str:
+    """Hero + gallery from Photos JAY (assets/images/windows/)."""
     html = re.sub(
         r'(<div style="position:relative;height:620px;overflow:hidden[^"]*">\s*)'
         r'<img src="[^"]+" alt="WINDOWS[^"]*" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">',
@@ -484,12 +484,26 @@ def apply_windows_images(html: str) -> str:
         for src in WINDOWS_GALLERY
     )
     html = re.sub(
-        r'<div style="display:grid;grid-template-columns:repeat\(3,1fr\);gap:1px;background:rgba\(233,236,242,.12\);border-top:1px solid rgba\(233,236,242,.12\);border-bottom:1px solid rgba\(233,236,242,.12\)">\s*'
+        r'<div style="display:grid;grid-template-columns:repeat\([34],1fr\);gap:1px;background:rgba\(233,236,242,.12\);border-top:1px solid rgba\(233,236,242,.12\);border-bottom:1px solid rgba\(233,236,242,.12\)">\s*'
         r'(?:<img src="[^"]+" alt="WINDOWS[^"]*" style="width:100%;aspect-ratio:4/3;object-fit:cover;display:block">\s*)+'
         r"</div>",
         f'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:rgba(233,236,242,.12);border-top:1px solid rgba(233,236,242,.12);border-bottom:1px solid rgba(233,236,242,.12)">{gallery_imgs}</div>',
         html,
         count=1,
+    )
+    credit = "Photos: Jay" if lang == "en" else "Photos : Jay"
+    credit_block = (
+        f'<div style="padding:4px 44px 20px;font:400 10px \'IBM Plex Mono\',monospace;'
+        f'color:rgba(233,236,242,.38);text-align:right">{credit}</div>\n  '
+    )
+    html = re.sub(
+        r"(<div style=\"display:grid;grid-template-columns:repeat\(4,1fr\);gap:1px;background:rgba\(233,236,242,.12\);border-top:1px solid rgba\(233,236,242,.12\);border-bottom:1px solid rgba\(233,236,242,.12\)\">"
+        r".*?</div>\s*)"
+        r"(<div style=\"display:flex;justify-content:space-between;align-items:center;gap:40px;padding:40px 44px;border-bottom:1px solid rgba\(233,236,242,.12\)\">)",
+        lambda m: m.group(1) + credit_block + m.group(2),
+        html,
+        count=1,
+        flags=re.DOTALL,
     )
     return html
 
@@ -581,9 +595,16 @@ def build_page(page: str, lang: str, body: str, styles: str) -> str:
             html,
         )
         html = re.sub(
-            r'(<a href="/windows"[^>]*><img src=")[^"]+(" alt="WINDOWS")',
+            r'(<a href="/(?:en/)?windows"[^>]*><img src=")[^"]+(" alt="WINDOWS")',
             rf'\1{WINDOWS_DIR}/tile.webp\2',
             html,
+        )
+        html = re.sub(
+            r'(<div style="position:relative;height:640px;overflow:hidden[^"]*">\s*)'
+            r'<img src="[^"]+" alt="WINDOWS[^"]*" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">',
+            rf'\1<img src="{WINDOWS_HERO}" alt="WINDOWS" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">',
+            html,
+            count=1,
         )
         html = html.replace(
             "▶ Cherche en Corps à San Francisco",
@@ -602,7 +623,7 @@ def build_page(page: str, lang: str, body: str, styles: str) -> str:
     if page == "fleur.html":
         html = apply_fleur_images(html)
     elif page == "windows.html":
-        html = apply_windows_images(html)
+        html = apply_windows_images(html, lang)
     return head_block(page, lang, styles) + html + "\n</body>\n</html>\n"
 
 
