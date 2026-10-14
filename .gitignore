@@ -5,3 +5,5 @@ node_modules/
 .claude/worktrees/
 assets/_raw/
 legacy/bundles/
+__pycache__/
+*.pyc
