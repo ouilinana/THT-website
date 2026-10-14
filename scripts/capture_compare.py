@@ -11,13 +11,12 @@ from playwright.sync_api import sync_playwright
 PROD = "https://trois-heures-trente.com"
 LOCAL = "http://127.0.0.1:8080"
 OUT = Path("/opt/cursor/artifacts/compare")
-# Production uses extensionless URLs; local preview server needs .html
 PAGES = [
-    ("home", "/", "/index.html"),
-    ("cherche", "/cherche-en-corps", "/cherche-en-corps.html"),
-    ("fleur", "/fleur", "/fleur.html"),
-    ("windows", "/windows", "/windows.html"),
-    ("contact", "/contact", "/contact.html"),
+    ("home", "/", "/"),
+    ("cherche", "/cherche-en-corps", "/cherche-en-corps"),
+    ("fleur", "/fleur", "/fleur"),
+    ("windows", "/windows", "/windows"),
+    ("contact", "/contact", "/contact"),
 ]
 VIEWPORTS = [("desktop", 1280, 900), ("mobile", 390, 844)]
 

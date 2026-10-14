@@ -109,13 +109,31 @@ PAGE_META: dict[str, dict[str, str]] = {
 }
 
 
+def _script_json_payload(html: str, script_type: str, *, close_from_end: bool = False) -> str:
+    """Extract JSON text from a bundler script tag."""
+    open_tag = f'<script type="{script_type}">'
+    start = html.index(open_tag) + len(open_tag)
+    if close_from_end:
+        end = html.rindex("</script>", start)
+    else:
+        end = html.index("</script>", start)
+    return html[start:end].strip()
+
+
+def json_for_script_embed(value: str) -> str:
+    """Serialize a string for embedding in <script type=\"__bundler/template\"> without closing the host tag."""
+    payload = json.dumps(value, ensure_ascii=False)
+    # Match production bundles: escape closing HTML tags inside the JSON string.
+    return payload.replace("</", r"<\u002F")
+
+
 def parse_bundle(path: Path | str) -> tuple[dict, str]:
     text = path if isinstance(path, str) else path.read_text(encoding="utf-8")
     manifest = json.loads(
-        re.search(r'<script type="__bundler/manifest">(.*?)</script>', text, re.DOTALL).group(1)
+        _script_json_payload(html=text, script_type="__bundler/manifest", close_from_end=False)
     )
     template = json.loads(
-        re.search(r'<script type="__bundler/template">(.*?)</script>', text, re.DOTALL).group(1)
+        _script_json_payload(html=text, script_type="__bundler/template", close_from_end=True)
     )
     return manifest, template
 
@@ -212,8 +230,10 @@ def collect_assets() -> dict[str, str]:
     return uuid_map
 
 
-def replace_uuids(html: str, uuid_map: dict[str, str]) -> str:
+def replace_uuids(html: str, uuid_map: dict[str, str], *, include_fonts: bool = True) -> str:
     for uid, url in sorted(uuid_map.items(), key=lambda x: -len(x[0])):
+        if not include_fonts and url.startswith("/assets/fonts/"):
+            continue
         html = html.replace(f'"{uid}"', f'"{url}"')
         html = html.replace(f"url({uid})", f"url({url})")
         html = html.replace(f'url("{uid}")', f'url("{url}")')
@@ -394,13 +414,13 @@ def fix_cherche_videos(html: str, lang: str) -> str:
             '<div style="display:flex;flex-direction:column;gap:20px">'
             '<div><div style="font:400 11px \'IBM Plex Mono\',monospace;color:#5ec9ff;margin-bottom:8px;letter-spacing:.08em">TEASER</div>'
             '<div style="aspect-ratio:16/9;background:#000;border:1px solid rgba(233,236,242,.12)">'
-            '<iframe src="https://www.youtube.com/embed/TjewwAOC488" title="Cherche en Corps — teaser" style="width:100%;height:100%;border:0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div></div>'
+            '<iframe src="https://www.youtube.com/embed/TjewwAOC488" title="Cherche en Corps — teaser" style="width:100%;height:100%;border:0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div></div>'
             '<div><div style="font:400 11px \'IBM Plex Mono\',monospace;color:#5ec9ff;margin-bottom:8px;letter-spacing:.08em">CAPTATION INTÉGRALE</div>'
             '<div style="aspect-ratio:16/9;background:#000;border:1px solid rgba(233,236,242,.12)">'
-            '<iframe src="https://www.youtube.com/embed/LgsgqCNG7_U" title="Cherche en Corps — captation" style="width:100%;height:100%;border:0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div></div>'
+            '<iframe src="https://www.youtube.com/embed/LgsgqCNG7_U" title="Cherche en Corps — captation" style="width:100%;height:100%;border:0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div></div>'
             '<div><div style="font:400 11px \'IBM Plex Mono\',monospace;color:rgba(233,236,242,.55);margin-bottom:8px;letter-spacing:.08em">RÉFÉRENCE · SAN FRANCISCO</div>'
             '<div style="aspect-ratio:16/9;background:#000;border:1px solid rgba(233,236,242,.12)">'
-            '<iframe src="https://www.youtube.com/embed/K9OICzieSfc" title="Cherche en Corps à San Francisco" style="width:100%;height:100%;border:0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div></div>'
+            '<iframe src="https://www.youtube.com/embed/K9OICzieSfc" title="Cherche en Corps à San Francisco" style="width:100%;height:100%;border:0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div></div>'
             "</div>"
             '<div style="display:flex;gap:20px;font:400 11px \'IBM Plex Mono\',monospace;margin-top:8px">'
             '<a href="https://www.youtube.com/@THTCompagnie" style="color:rgba(233,236,242,.7);text-decoration:none">▶ plus de vidéos sur la chaîne ↗</a></div>'
@@ -411,13 +431,13 @@ def fix_cherche_videos(html: str, lang: str) -> str:
             '<div style="display:flex;flex-direction:column;gap:20px">'
             '<div><div style="font:400 11px \'IBM Plex Mono\',monospace;color:#5ec9ff;margin-bottom:8px;letter-spacing:.08em">TEASER</div>'
             '<div style="aspect-ratio:16/9;background:#000;border:1px solid rgba(233,236,242,.12)">'
-            '<iframe src="https://www.youtube.com/embed/TjewwAOC488" title="Cherche en Corps — teaser" style="width:100%;height:100%;border:0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div></div>'
+            '<iframe src="https://www.youtube.com/embed/TjewwAOC488" title="Cherche en Corps — teaser" style="width:100%;height:100%;border:0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div></div>'
             '<div><div style="font:400 11px \'IBM Plex Mono\',monospace;color:#5ec9ff;margin-bottom:8px;letter-spacing:.08em">FULL RECORDING</div>'
             '<div style="aspect-ratio:16/9;background:#000;border:1px solid rgba(233,236,242,.12)">'
-            '<iframe src="https://www.youtube.com/embed/LgsgqCNG7_U" title="Cherche en Corps — full performance" style="width:100%;height:100%;border:0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div></div>'
+            '<iframe src="https://www.youtube.com/embed/LgsgqCNG7_U" title="Cherche en Corps — full performance" style="width:100%;height:100%;border:0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div></div>'
             '<div><div style="font:400 11px \'IBM Plex Mono\',monospace;color:rgba(233,236,242,.55);margin-bottom:8px;letter-spacing:.08em">REFERENCE · SAN FRANCISCO</div>'
             '<div style="aspect-ratio:16/9;background:#000;border:1px solid rgba(233,236,242,.12)">'
-            '<iframe src="https://www.youtube.com/embed/K9OICzieSfc" title="Cherche en Corps in San Francisco" style="width:100%;height:100%;border:0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div></div>'
+            '<iframe src="https://www.youtube.com/embed/K9OICzieSfc" title="Cherche en Corps in San Francisco" style="width:100%;height:100%;border:0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div></div>'
             "</div>"
             '<div style="display:flex;gap:20px;font:400 11px \'IBM Plex Mono\',monospace;margin-top:8px">'
             '<a href="https://www.youtube.com/@THTCompagnie" style="color:rgba(233,236,242,.7);text-decoration:none">▶ more on our YouTube channel ↗</a></div>'
@@ -617,14 +637,11 @@ def apply_fleur_gallery(template: str) -> str:
 
 
 def set_bundle_template(html: str, template: str) -> str:
-    payload = json.dumps(template, ensure_ascii=False)
-    return re.sub(
-        r'(<script type="__bundler/template">)(.*?)(</script>)',
-        lambda m: m.group(1) + payload + m.group(3),
-        html,
-        count=1,
-        flags=re.DOTALL,
-    )
+    payload = json_for_script_embed(template)
+    open_tag = '<script type="__bundler/template">'
+    start = html.index(open_tag) + len(open_tag)
+    end = html.rindex("</script>", start)
+    return html[:start] + payload + html[end:]
 
 
 def set_default_locale(template: str, lang: str) -> str:
@@ -706,7 +723,8 @@ def shrink_externalized_manifest(html: str, uuid_map: dict[str, str]) -> str:
 def patch_template(template: str, page: str, lang: str) -> str:
     template = set_default_locale(template, lang)
     template = fix_bundle_nav_links(template, lang)
-    template = replace_uuids(template, uuid_map_global)
+    # Keep @font-face src as manifest UUIDs — the bundler split/join would break /assets/fonts/<uuid>.woff2 paths.
+    template = replace_uuids(template, uuid_map_global, include_fonts=False)
     template = fix_wp_urls(template)
     template = fix_pronouns(template)
     if page == "cherche-en-corps.html":
@@ -742,9 +760,7 @@ def patch_bundle(html: str, page: str, lang: str) -> str:
     _manifest, template = parse_bundle(html)
     template = patch_template(template, page, lang)
     html = set_bundle_template(html, template)
-    html = replace_uuids(html, uuid_map_global)
-    html = fix_wp_urls(html)
-    # Manifest shrink disabled: bundler still walks all manifest entries at boot.
+    # Never replace_uuids/fix_wp_urls on the full document — that corrupts manifest JSON keys.
     html = inject_document_seo(html, page, lang)
     return html
 
