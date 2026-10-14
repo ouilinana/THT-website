@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Optimize WINDOWS photos (Photos JAY / OneDrive) into assets/images/windows/."""
+"""Optimize WINDOWS photos (Photos JAY) into assets/images/windows/.
+
+Sources match legacy WP filenames THT-{114,241,329}-scaled via Jay folder name or phash
+against bundled-page extracts (Wayback unavailable).
+"""
 
 from __future__ import annotations
 
@@ -13,20 +17,17 @@ OUT = ROOT / "assets" / "images" / "windows"
 TARGET_KB = 200
 MAX_WIDTH = 1600
 
-# Matches legacy WP hero slot (THT-114-scaled → THT-100.jpg; 114 not in Jay set)
+# WP THT-329-scaled → windows hero + gallery slot 3
+# WP THT-114-scaled → home hero + gallery slot 1
+# WP THT-241-scaled → home tile + gallery slot 2
 FILES = [
-    ("hero", "THT-100.jpg"),
-    ("og-windows", "THT-100.jpg"),
-    ("g01", "THT-1.jpg"),
-    ("g02", "THT-23.jpg"),
-    ("g03", "THT-26.jpg"),
-    ("g04", "THT-101.jpg"),
-    ("g05", "THT-190.jpg"),
-    ("g06", "THT-220.jpg"),
-    ("g07", "THT-250.jpg"),
-    ("g08", "THT-278.jpg"),
+    ("hero", "THT-199.jpg"),  # THT-329-scaled (phash → san-francisco extract)
+    ("og-windows", "THT-199.jpg"),
+    ("g01", "THT-266.jpg"),  # THT-114-scaled
+    ("g02", "THT-241.jpg"),  # THT-241-scaled (exact filename)
+    ("g03", "THT-199.jpg"),  # THT-329-scaled (gallery repeat)
 ]
-TILE = "THT-103.jpg"
+TILE = "THT-241.jpg"
 
 
 def save_webp(im: Image.Image, dest: Path, target_kb: int = TARGET_KB) -> int:
@@ -55,14 +56,14 @@ def main() -> int:
         with Image.open(src) as im:
             out = OUT / f"{slug}.webp"
             size = save_webp(im, out)
-            print(f"{out.name}: {size // 1024} KB")
-    tile_src = src_dir / TILE
-    if not tile_src.exists():
-        print(f"Missing {tile_src}", file=sys.stderr)
-        return 1
-    with Image.open(tile_src) as im:
+            print(f"{out.name} ← {name}: {size // 1024} KB")
+    with Image.open(src_dir / TILE) as im:
         save_webp(im, OUT / "tile.webp")
-    print(f"tile.webp: {(OUT / 'tile.webp').stat().st_size // 1024} KB")
+    print(f"tile.webp ← {TILE}: {(OUT / 'tile.webp').stat().st_size // 1024} KB")
+    for extra in OUT.glob("g0*.webp"):
+        if extra.name not in {f"g0{i}.webp" for i in range(1, 4)}:
+            extra.unlink()
+            print(f"removed {extra.name}")
     return 0
 
 

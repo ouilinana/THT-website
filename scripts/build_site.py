@@ -34,12 +34,12 @@ FLEUR_GALLERY = [f"{FLEUR_DIR}/g{i:02d}.webp" for i in range(1, 9)]
 WINDOWS_DIR = "/assets/images/windows"
 WINDOWS_HERO = f"{WINDOWS_DIR}/hero.webp"
 WINDOWS_OG = f"{SITE_URL}{WINDOWS_DIR}/og-windows.webp"
-WINDOWS_GALLERY = [f"{WINDOWS_DIR}/g{i:02d}.webp" for i in range(1, 9)]
+WINDOWS_GALLERY = [f"{WINDOWS_DIR}/g{i:02d}.webp" for i in range(1, 4)]
 
 WP_REPLACEMENTS = {
-    "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-114-scaled.jpg": WINDOWS_HERO,
+    "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-114-scaled.jpg": f"{WINDOWS_DIR}/g01.webp",
     "https://www.trois-heures-trente.com/wp-content/uploads/2023/08/Ouili_fleur-63-scaled.jpg": f"{FLEUR_DIR}/tile.webp",
-    "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-241-scaled.jpg": "/assets/images/cherche-tile.webp",
+    "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-241-scaled.jpg": f"{WINDOWS_DIR}/tile.webp",
     "https://www.trois-heures-trente.com/wp-content/uploads/2023/08/Ouili_fleur-52-2-scaled.jpg": FLEUR_HERO,
     "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-329-scaled.jpg": WINDOWS_HERO,
     "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/Portrait-de-CEC-FR-Presentation-1-768x1024.png": "/assets/docs/THT_Cherche-en-corps_01_presentation.pdf",
@@ -484,10 +484,10 @@ def apply_windows_images(html: str, lang: str) -> str:
         for src in WINDOWS_GALLERY
     )
     html = re.sub(
-        r'<div style="display:grid;grid-template-columns:repeat\([34],1fr\);gap:1px;background:rgba\(233,236,242,.12\);border-top:1px solid rgba\(233,236,242,.12\);border-bottom:1px solid rgba\(233,236,242,.12\)">\s*'
+        r'<div style="display:grid;grid-template-columns:repeat\([348],1fr\);gap:1px;background:rgba\(233,236,242,.12\);border-top:1px solid rgba\(233,236,242,.12\);border-bottom:1px solid rgba\(233,236,242,.12\)">\s*'
         r'(?:<img src="[^"]+" alt="WINDOWS[^"]*" style="width:100%;aspect-ratio:4/3;object-fit:cover;display:block">\s*)+'
         r"</div>",
-        f'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:rgba(233,236,242,.12);border-top:1px solid rgba(233,236,242,.12);border-bottom:1px solid rgba(233,236,242,.12)">{gallery_imgs}</div>',
+        f'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:rgba(233,236,242,.12);border-top:1px solid rgba(233,236,242,.12);border-bottom:1px solid rgba(233,236,242,.12)">{gallery_imgs}</div>',
         html,
         count=1,
     )
@@ -497,7 +497,7 @@ def apply_windows_images(html: str, lang: str) -> str:
         f'color:rgba(233,236,242,.38);text-align:right">{credit}</div>\n  '
     )
     html = re.sub(
-        r"(<div style=\"display:grid;grid-template-columns:repeat\(4,1fr\);gap:1px;background:rgba\(233,236,242,.12\);border-top:1px solid rgba\(233,236,242,.12\);border-bottom:1px solid rgba\(233,236,242,.12\)\">"
+        r"(<div style=\"display:grid;grid-template-columns:repeat\(3,1fr\);gap:1px;background:rgba\(233,236,242,.12\);border-top:1px solid rgba\(233,236,242,.12\);border-bottom:1px solid rgba\(233,236,242,.12\)\">"
         r".*?</div>\s*)"
         r"(<div style=\"display:flex;justify-content:space-between;align-items:center;gap:40px;padding:40px 44px;border-bottom:1px solid rgba\(233,236,242,.12\)\">)",
         lambda m: m.group(1) + credit_block + m.group(2),
@@ -599,10 +599,11 @@ def build_page(page: str, lang: str, body: str, styles: str) -> str:
             rf'\1{WINDOWS_DIR}/tile.webp\2',
             html,
         )
+        home_hero = f"{WINDOWS_DIR}/g01.webp"
         html = re.sub(
             r'(<div style="position:relative;height:640px;overflow:hidden[^"]*">\s*)'
             r'<img src="[^"]+" alt="WINDOWS[^"]*" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">',
-            rf'\1<img src="{WINDOWS_HERO}" alt="WINDOWS" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">',
+            rf'\1<img src="{home_hero}" alt="WINDOWS" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">',
             html,
             count=1,
         )
@@ -671,10 +672,6 @@ def main() -> int:
             if "cherche" in n and "duo" in n:
                 WP_REPLACEMENTS[
                     "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-241-scaled.jpg"
-                ] = f"/assets/images/{im.name}"
-            if "cherche" in n and "san" in n:
-                WP_REPLACEMENTS[
-                    "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-329-scaled.jpg"
                 ] = f"/assets/images/{im.name}"
         og = ASSETS / "images" / "og-default.webp"
         if not og.exists():
