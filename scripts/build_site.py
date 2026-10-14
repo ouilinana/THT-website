@@ -31,9 +31,8 @@ FLEUR_HERO = f"{FLEUR_DIR}/hero.webp"
 FLEUR_OG = f"{SITE_URL}{FLEUR_DIR}/og-fleur.webp"
 FLEUR_GALLERY = [f"{FLEUR_DIR}/g{i:02d}.webp" for i in range(1, 9)]
 
-HOME_HERO_WP = "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-114-scaled.jpg"
-
 WP_REPLACEMENTS = {
+    "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-114-scaled.jpg": "/assets/images/windows-hero.webp",
     "https://www.trois-heures-trente.com/wp-content/uploads/2023/08/Ouili_fleur-63-scaled.jpg": f"{FLEUR_DIR}/tile.webp",
     "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-241-scaled.jpg": "/assets/images/cherche-tile.webp",
     "https://www.trois-heures-trente.com/wp-content/uploads/2023/08/Ouili_fleur-52-2-scaled.jpg": FLEUR_HERO,
@@ -408,14 +407,42 @@ def fix_newsletter(html: str, lang: str) -> str:
     return html
 
 
-def fix_home_hero(template: str) -> str:
-    """Match production home hero: WP hero image does not load (dark gradient + headline only)."""
+CHERCHE_LOGO = "/assets/images/cherche-en-corps-logo.png"
+
+
+def ensure_cherche_logo_asset() -> None:
+    """Title logo PNG with transparent background (source bundle asset is flat grey)."""
+    src = ASSETS / "images" / "cherche-en-corps-45f1f032.webp"
+    dest = ASSETS / "images" / "cherche-en-corps-logo.png"
+    if not src.exists():
+        return
+    if dest.exists() and dest.stat().st_mtime >= src.stat().st_mtime:
+        return
+    try:
+        from PIL import Image
+    except ImportError:
+        return
+    im = Image.open(src).convert("RGBA")
+    bg = im.getpixel((0, 0))[:3]
+    tol = 28
+    px = im.load()
+    for y in range(im.height):
+        for x in range(im.width):
+            r, g, b, a = px[x, y]
+            if (
+                abs(r - bg[0]) <= tol
+                and abs(g - bg[1]) <= tol
+                and abs(b - bg[2]) <= tol
+            ):
+                px[x, y] = (r, g, b, 0)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    im.save(dest, "PNG", optimize=True)
+
+
+def fix_cherche_title_logo(template: str) -> str:
     return re.sub(
-        r'(<div style="position:relative;height:640px;overflow:hidden[^"]*">\s*)'
-        r'<img src="[^"]+" alt="(WINDOWS — (?:noir plateau|blackout stage))" '
-        r'style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">',
-        rf'\1<img src="{HOME_HERO_WP}" alt="\2" '
-        r'style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">',
+        r'(<img src=")[^"]+(" alt="Cherche en Corps" style="width:480px;display:block">)',
+        rf"\1{CHERCHE_LOGO}\2",
         template,
     )
 
@@ -739,6 +766,7 @@ def patch_template(template: str, page: str, lang: str) -> str:
     template = fix_wp_urls(template)
     template = fix_pronouns(template)
     if page == "cherche-en-corps.html":
+        template = fix_cherche_title_logo(template)
         template = fix_cherche_videos(template, "fr")
         template = fix_cherche_videos(template, "en")
         template = template.replace("LgsgqCNG7_U", "")
@@ -748,7 +776,6 @@ def patch_template(template: str, page: str, lang: str) -> str:
     if page == "fleur.html":
         template = apply_fleur_gallery(template)
     if page == "index.html":
-        template = fix_home_hero(template)
         template = fix_newsletter(template, "fr")
         template = fix_newsletter(template, "en")
         template = template.replace(
@@ -815,6 +842,7 @@ def main() -> int:
         )
         return 1
 
+    ensure_cherche_logo_asset()
     uuid_map_global = collect_assets()
 
     img_dir = ASSETS / "images"
@@ -831,6 +859,9 @@ def main() -> int:
                     "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-329-scaled.jpg"
                 ] = f"/assets/images/{im.name}"
         hero = max(images, key=lambda p: p.stat().st_size)
+        WP_REPLACEMENTS[
+            "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-114-scaled.jpg"
+        ] = f"/assets/images/{hero.name}"
         og = ASSETS / "images" / "og-default.webp"
         if not og.exists():
             shutil.copy2(hero, og)
