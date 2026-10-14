@@ -14,13 +14,13 @@ SRC = Path("/tmp/windows-photos-jay")
 TARGET_KB = 200
 MAX_WIDTH = 1600
 
-# Curated picks (Jay folder) — see PR report for rationale.
+# Raphaël picks (Photos JAY).
 FILES = [
     ("hero", "THT-104.jpg"),
     ("og-windows", "THT-104.jpg"),
-    ("g01", "THT-199.jpg"),
-    ("g02", "THT-232.jpg"),
-    ("g03", "THT-263.jpg"),
+    ("g01", "THT-195.jpg"),
+    ("g02", "THT-24.jpg"),
+    ("g03", "THT-52.jpg"),
 ]
 TILE = "THT-232.jpg"
 
