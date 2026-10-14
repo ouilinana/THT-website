@@ -31,8 +31,9 @@ FLEUR_HERO = f"{FLEUR_DIR}/hero.webp"
 FLEUR_OG = f"{SITE_URL}{FLEUR_DIR}/og-fleur.webp"
 FLEUR_GALLERY = [f"{FLEUR_DIR}/g{i:02d}.webp" for i in range(1, 9)]
 
+HOME_HERO_WP = "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-114-scaled.jpg"
+
 WP_REPLACEMENTS = {
-    "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-114-scaled.jpg": "/assets/images/windows-hero.webp",
     "https://www.trois-heures-trente.com/wp-content/uploads/2023/08/Ouili_fleur-63-scaled.jpg": f"{FLEUR_DIR}/tile.webp",
     "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-241-scaled.jpg": "/assets/images/cherche-tile.webp",
     "https://www.trois-heures-trente.com/wp-content/uploads/2023/08/Ouili_fleur-52-2-scaled.jpg": FLEUR_HERO,
@@ -407,6 +408,18 @@ def fix_newsletter(html: str, lang: str) -> str:
     return html
 
 
+def fix_home_hero(template: str) -> str:
+    """Match production home hero: WP hero image does not load (dark gradient + headline only)."""
+    return re.sub(
+        r'(<div style="position:relative;height:640px;overflow:hidden[^"]*">\s*)'
+        r'<img src="[^"]+" alt="(WINDOWS — (?:noir plateau|blackout stage))" '
+        r'style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">',
+        rf'\1<img src="{HOME_HERO_WP}" alt="\2" '
+        r'style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">',
+        template,
+    )
+
+
 def fix_cherche_videos(html: str, lang: str) -> str:
     if lang == "fr":
         block = (
@@ -414,10 +427,9 @@ def fix_cherche_videos(html: str, lang: str) -> str:
             '<div style="display:flex;flex-direction:column;gap:20px">'
             '<div><div style="font:400 11px \'IBM Plex Mono\',monospace;color:#5ec9ff;margin-bottom:8px;letter-spacing:.08em">TEASER</div>'
             '<div style="aspect-ratio:16/9;background:#000;border:1px solid rgba(233,236,242,.12)">'
-            '<iframe src="https://www.youtube.com/embed/TjewwAOC488" title="Cherche en Corps — teaser" style="width:100%;height:100%;border:0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div></div>'
-            '<div><div style="font:400 11px \'IBM Plex Mono\',monospace;color:#5ec9ff;margin-bottom:8px;letter-spacing:.08em">CAPTATION INTÉGRALE</div>'
-            '<div style="aspect-ratio:16/9;background:#000;border:1px solid rgba(233,236,242,.12)">'
-            '<iframe src="https://www.youtube.com/embed/LgsgqCNG7_U" title="Cherche en Corps — captation" style="width:100%;height:100%;border:0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div></div>'
+            '<iframe src="https://www.youtube.com/embed/TjewwAOC488" title="Cherche en Corps — teaser" style="width:100%;height:100%;border:0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>'
+            '<p style="margin:10px 0 0;font:400 12px/1.6 \'IBM Plex Mono\',monospace;color:rgba(233,236,242,.65)">'
+            '<a href="/contact" style="color:#5ec9ff;text-decoration:none">Contactez-nous pour obtenir la captation complète.</a></p></div>'
             '<div><div style="font:400 11px \'IBM Plex Mono\',monospace;color:rgba(233,236,242,.55);margin-bottom:8px;letter-spacing:.08em">RÉFÉRENCE · SAN FRANCISCO</div>'
             '<div style="aspect-ratio:16/9;background:#000;border:1px solid rgba(233,236,242,.12)">'
             '<iframe src="https://www.youtube.com/embed/K9OICzieSfc" title="Cherche en Corps à San Francisco" style="width:100%;height:100%;border:0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div></div>'
@@ -431,10 +443,9 @@ def fix_cherche_videos(html: str, lang: str) -> str:
             '<div style="display:flex;flex-direction:column;gap:20px">'
             '<div><div style="font:400 11px \'IBM Plex Mono\',monospace;color:#5ec9ff;margin-bottom:8px;letter-spacing:.08em">TEASER</div>'
             '<div style="aspect-ratio:16/9;background:#000;border:1px solid rgba(233,236,242,.12)">'
-            '<iframe src="https://www.youtube.com/embed/TjewwAOC488" title="Cherche en Corps — teaser" style="width:100%;height:100%;border:0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div></div>'
-            '<div><div style="font:400 11px \'IBM Plex Mono\',monospace;color:#5ec9ff;margin-bottom:8px;letter-spacing:.08em">FULL RECORDING</div>'
-            '<div style="aspect-ratio:16/9;background:#000;border:1px solid rgba(233,236,242,.12)">'
-            '<iframe src="https://www.youtube.com/embed/LgsgqCNG7_U" title="Cherche en Corps — full performance" style="width:100%;height:100%;border:0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div></div>'
+            '<iframe src="https://www.youtube.com/embed/TjewwAOC488" title="Cherche en Corps — teaser" style="width:100%;height:100%;border:0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>'
+            '<p style="margin:10px 0 0;font:400 12px/1.6 \'IBM Plex Mono\',monospace;color:rgba(233,236,242,.65)">'
+            '<a href="/en/contact" style="color:#5ec9ff;text-decoration:none">Contact us to receive the full recording.</a></p></div>'
             '<div><div style="font:400 11px \'IBM Plex Mono\',monospace;color:rgba(233,236,242,.55);margin-bottom:8px;letter-spacing:.08em">REFERENCE · SAN FRANCISCO</div>'
             '<div style="aspect-ratio:16/9;background:#000;border:1px solid rgba(233,236,242,.12)">'
             '<iframe src="https://www.youtube.com/embed/K9OICzieSfc" title="Cherche en Corps in San Francisco" style="width:100%;height:100%;border:0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div></div>'
@@ -730,12 +741,14 @@ def patch_template(template: str, page: str, lang: str) -> str:
     if page == "cherche-en-corps.html":
         template = fix_cherche_videos(template, "fr")
         template = fix_cherche_videos(template, "en")
+        template = template.replace("LgsgqCNG7_U", "")
         template = fix_dossier_links(template, page)
     if page == "contact.html":
         template = fix_dossier_links(template, page)
     if page == "fleur.html":
         template = apply_fleur_gallery(template)
     if page == "index.html":
+        template = fix_home_hero(template)
         template = fix_newsletter(template, "fr")
         template = fix_newsletter(template, "en")
         template = template.replace(
@@ -818,9 +831,6 @@ def main() -> int:
                     "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-329-scaled.jpg"
                 ] = f"/assets/images/{im.name}"
         hero = max(images, key=lambda p: p.stat().st_size)
-        WP_REPLACEMENTS[
-            "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-114-scaled.jpg"
-        ] = f"/assets/images/{hero.name}"
         og = ASSETS / "images" / "og-default.webp"
         if not og.exists():
             shutil.copy2(hero, og)
