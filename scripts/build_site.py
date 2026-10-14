@@ -31,12 +31,17 @@ FLEUR_HERO = f"{FLEUR_DIR}/hero.webp"
 FLEUR_OG = f"{SITE_URL}{FLEUR_DIR}/og-fleur.webp"
 FLEUR_GALLERY = [f"{FLEUR_DIR}/g{i:02d}.webp" for i in range(1, 9)]
 
+WINDOWS_DIR = "/assets/images/windows"
+WINDOWS_HERO = f"{WINDOWS_DIR}/hero.webp"
+WINDOWS_OG = f"{SITE_URL}{WINDOWS_DIR}/og-windows.webp"
+WINDOWS_GALLERY = [f"{WINDOWS_DIR}/g{i:02d}.webp" for i in range(1, 4)]
+
 WP_REPLACEMENTS = {
-    "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-114-scaled.jpg": "/assets/images/windows-hero.webp",
+    "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-114-scaled.jpg": f"{WINDOWS_DIR}/g01.webp",
     "https://www.trois-heures-trente.com/wp-content/uploads/2023/08/Ouili_fleur-63-scaled.jpg": f"{FLEUR_DIR}/tile.webp",
-    "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-241-scaled.jpg": "/assets/images/cherche-tile.webp",
+    "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-241-scaled.jpg": f"{WINDOWS_DIR}/tile.webp",
     "https://www.trois-heures-trente.com/wp-content/uploads/2023/08/Ouili_fleur-52-2-scaled.jpg": FLEUR_HERO,
-    "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-329-scaled.jpg": "/assets/images/windows-hero.webp",
+    "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-329-scaled.jpg": WINDOWS_HERO,
     "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/Portrait-de-CEC-FR-Presentation-1-768x1024.png": CEC_PDF,
 }
 
@@ -538,6 +543,32 @@ def apply_fleur_images(html: str) -> str:
     return html
 
 
+def apply_windows_gallery(template: str) -> str:
+    """Hero + 3-column gallery from Photos JAY (FR + EN blocks in one template)."""
+    template = re.sub(
+        r'(<div style="position:relative;height:620px;overflow:hidden[^"]*">\s*)'
+        r'<img src="[^"]+" (alt="WINDOWS[^"]*" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover")',
+        rf'\1<img src="{WINDOWS_HERO}" \2',
+        template,
+    )
+    gallery_imgs = "".join(
+        f'<img src="{src}" alt="WINDOWS" style="width:100%;aspect-ratio:4/3;object-fit:cover;display:block">'
+        for src in WINDOWS_GALLERY
+    )
+    grid = (
+        f'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:rgba(233,236,242,.12);'
+        f'border-top:1px solid rgba(233,236,242,.12);border-bottom:1px solid rgba(233,236,242,.12)">{gallery_imgs}</div>'
+    )
+    template = re.sub(
+        r'<div style="display:grid;grid-template-columns:repeat\(3,1fr\);gap:1px;background:rgba\(233,236,242,.12\);border-top:1px solid rgba\(233,236,242,.12\);border-bottom:1px solid rgba\(233,236,242,.12\)">\s*'
+        r'(?:<img src="[^"]+" alt="WINDOWS[^"]*" style="width:100%;aspect-ratio:4/3;object-fit:cover;display:block">\s*)+'
+        r"</div>",
+        grid,
+        template,
+    )
+    return template
+
+
 def fix_pronouns(html: str) -> str:
     # Bundler artifact in EN ateliers copy; Ouili Nana uses he/him elsewhere.
     html = re.sub(
@@ -654,7 +685,7 @@ def build_page(page: str, lang: str, body: str, styles: str) -> str:
     if page == "fleur.html":
         html = apply_fleur_images(html)
     elif page == "windows.html":
-        html = apply_windows_images(html, lang)
+        html = apply_windows_gallery(html)
     return head_block(page, lang, styles) + html + "\n</body>\n</html>\n"
 
 
@@ -721,7 +752,12 @@ def inject_document_seo(html: str, page: str, lang: str) -> str:
     canonical = SITE_URL + path
     alt_fr = SITE_URL + (f"/{slug}" if slug != "index" else "/")
     alt_en = SITE_URL + (f"/en/{slug}" if slug != "index" else "/en/")
-    og = FLEUR_OG if page == "fleur.html" else f"{SITE_URL}/assets/images/og-default.webp"
+    if page == "fleur.html":
+        og = FLEUR_OG
+    elif page == "windows.html":
+        og = WINDOWS_OG
+    else:
+        og = f"{SITE_URL}/assets/images/og-default.webp"
     lang_attr = "fr" if lang == "fr" else "en"
     block = f"""
   <title>{meta["title"]}</title>
@@ -775,7 +811,11 @@ def patch_template(template: str, page: str, lang: str) -> str:
         template = fix_dossier_links(template, page)
     if page == "fleur.html":
         template = apply_fleur_gallery(template)
+    if page == "windows.html":
+        template = fix_wp_urls(template)
+        template = apply_windows_gallery(template)
     if page == "index.html":
+        template = fix_wp_urls(template)
         template = fix_newsletter(template, "fr")
         template = fix_newsletter(template, "en")
         template = template.replace(
@@ -845,26 +885,11 @@ def main() -> int:
     ensure_cherche_logo_asset()
     uuid_map_global = collect_assets()
 
-    img_dir = ASSETS / "images"
-    images = sorted(p for p in img_dir.glob("*.webp") if p.is_file())
-    if images:
-        for im in images:
-            n = im.name.lower()
-            if "cherche" in n and "duo" in n:
-                WP_REPLACEMENTS[
-                    "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-241-scaled.jpg"
-                ] = f"/assets/images/{im.name}"
-            if "cherche" in n and "san" in n:
-                WP_REPLACEMENTS[
-                    "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-329-scaled.jpg"
-                ] = f"/assets/images/{im.name}"
-        hero = max(images, key=lambda p: p.stat().st_size)
-        WP_REPLACEMENTS[
-            "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-114-scaled.jpg"
-        ] = f"/assets/images/{hero.name}"
-        og = ASSETS / "images" / "og-default.webp"
-        if not og.exists():
-            shutil.copy2(hero, og)
+    og = ASSETS / "images" / "og-default.webp"
+    if not og.exists():
+        hero_candidates = list((ASSETS / "images" / "windows").glob("hero.webp"))
+        if hero_candidates:
+            shutil.copy2(hero_candidates[0], og)
 
     en_dir = OUT / "en"
     en_dir.mkdir(exist_ok=True)
