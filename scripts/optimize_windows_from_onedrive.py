@@ -16,9 +16,9 @@ MAX_WIDTH = 1600
 
 # Curated picks (Jay folder) — see PR report for rationale.
 FILES = [
-    ("hero", "THT-1.jpg"),
-    ("og-windows", "THT-1.jpg"),
-    ("g01", "THT-104.jpg"),
+    ("hero", "THT-104.jpg"),
+    ("og-windows", "THT-104.jpg"),
+    ("g01", "THT-1.jpg"),
     ("g02", "THT-232.jpg"),
     ("g03", "THT-263.jpg"),
 ]
