@@ -18,7 +18,7 @@ MAX_WIDTH = 1600
 FILES = [
     ("hero", "THT-104.jpg"),
     ("og-windows", "THT-104.jpg"),
-    ("g01", "THT-1.jpg"),
+    ("g01", "THT-199.jpg"),
     ("g02", "THT-232.jpg"),
     ("g03", "THT-263.jpg"),
 ]
