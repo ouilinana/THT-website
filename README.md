@@ -24,7 +24,9 @@ pip install pillow
 python3 scripts/build_site.py
 ```
 
-This externalizes images/fonts to `assets/`, applies agreed content fixes inside the bundled template, writes FR root + `en/` copies (English default locale), and updates `sitemap.xml` / `robots.txt`.
+This externalizes images/fonts to `assets/`, applies agreed content fixes inside the bundled template, writes FR root + `en/` copies (English default locale), and updates `sitemap.xml`, `robots.txt`, and `llms.txt`.
+
+Public contact email: `compagnie.tht@gmail.com`.
 
 ## Newsletter API
 

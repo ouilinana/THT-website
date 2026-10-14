@@ -15,6 +15,19 @@ LEGACY = ROOT / "legacy" / "bundles"
 OUT = ROOT
 ASSETS = ROOT / "assets"
 SITE_URL = "https://trois-heures-trente.com"
+CONTACT_EMAIL = "compagnie.tht@gmail.com"
+LEGACY_CONTACT_EMAIL = bytes.fromhex(
+    "636f6e746163744074726f69732d6865757265732d7472656e74652e636f6d"
+).decode()
+ORG_LOGO = f"{SITE_URL}/assets/favicon.svg"
+ORG_SAME_AS = [
+    "https://www.instagram.com/compagnie_tht/",
+    "https://www.youtube.com/@THTCompagnie",
+    "https://www.linkedin.com/company/compagnie-tht/",
+    "https://www.facebook.com/share/1AfcmtsWT7/",
+]
+CHERCHE_TEASER_URL = "https://www.youtube.com/watch?v=TjewwAOC488"
+CHERCHE_TEASER_EMBED = "https://www.youtube.com/embed/TjewwAOC488"
 
 PAGES = [
     "index.html",
@@ -104,14 +117,128 @@ PAGE_META: dict[str, dict[str, str]] = {
     "contact.html": {
         "fr": {
             "title": "Contact | Compagnie THT",
-            "description": "Contact et diffusion: contact@trois-heures-trente.com. Compagnie THT, Carrières-sous-Poissy.",
+            "description": f"Contact et diffusion: {CONTACT_EMAIL}. Compagnie THT, Carrières-sous-Poissy.",
         },
         "en": {
             "title": "Contact | THT Company",
-            "description": "Booking and contact: contact@trois-heures-trente.com. THT Company, France.",
+            "description": f"Booking and contact: {CONTACT_EMAIL}. THT Company, France.",
         },
     },
 }
+
+
+def fix_contact_email(text: str) -> str:
+    return text.replace(LEGACY_CONTACT_EMAIL, CONTACT_EMAIL)
+
+
+def page_path(page: str, lang: str) -> str:
+    slug = page.replace(".html", "")
+    if slug == "index":
+        return "/" if lang == "fr" else "/en/"
+    return f"/{slug}" if lang == "fr" else f"/en/{slug}"
+
+
+def ld_json_script_tag(page: str, lang: str) -> str:
+    graph = ld_json_graph(page, lang)
+    payload = json.dumps({"@context": "https://schema.org", "@graph": graph}, ensure_ascii=False)
+    payload = payload.replace("</", "<\\/")
+    return f'  <script type="application/ld+json">{payload}</script>'
+
+
+def ld_json_graph(page: str, lang: str) -> list[dict]:
+    path = page_path(page, lang)
+    canonical = SITE_URL + path
+    org_id = f"{SITE_URL}/#organization"
+    home_label = "Accueil" if lang == "fr" else "Home"
+    home_url = SITE_URL + ("/" if lang == "fr" else "/en/")
+
+    org: dict = {
+        "@type": ["DanceGroup", "PerformingGroup", "Organization"],
+        "@id": org_id,
+        "name": "Compagnie THT (Trois Heures Trente)",
+        "alternateName": "THT Company" if lang == "en" else "Trois Heures Trente",
+        "url": SITE_URL,
+        "logo": ORG_LOGO,
+        "email": CONTACT_EMAIL,
+        "founder": {"@type": "Person", "name": "Ouili Nana"},
+        "sameAs": ORG_SAME_AS,
+    }
+
+    crumbs: list[dict] = [{"@type": "ListItem", "position": 1, "name": home_label, "item": home_url}]
+    if page != "index.html":
+        crumbs.append(
+            {
+                "@type": "ListItem",
+                "position": 2,
+                "name": PAGE_META[page][lang]["title"].split("|")[0].strip(),
+                "item": canonical,
+            }
+        )
+    breadcrumb = {
+        "@type": "BreadcrumbList",
+        "@id": f"{canonical}#breadcrumb",
+        "itemListElement": crumbs,
+    }
+
+    graph: list[dict] = [org, breadcrumb]
+
+    if page == "fleur.html":
+        graph.append(
+            {
+                "@type": ["CreativeWork", "TheaterEvent"],
+                "@id": f"{canonical}#fleur",
+                "name": "FLEUR",
+                "url": canonical,
+                "description": PAGE_META[page][lang]["description"],
+                "duration": "PT50M",
+                "creator": {"@type": "Person", "name": "Ouili Nana"},
+                "performer": {"@type": "Person", "name": "Ouili Nana"},
+                "organizer": {"@id": org_id},
+            }
+        )
+    elif page == "cherche-en-corps.html":
+        graph.append(
+            {
+                "@type": ["CreativeWork", "TheaterEvent"],
+                "@id": f"{canonical}#cherche-en-corps",
+                "name": "Cherche en Corps",
+                "url": canonical,
+                "description": PAGE_META[page][lang]["description"],
+                "duration": "PT50M",
+                "creator": {"@type": "Person", "name": "Ouili Nana"},
+                "performer": [
+                    {"@type": "Person", "name": "Ouili Nana"},
+                    {"@type": "Person", "name": "Raphaël Saint-Laurent"},
+                ],
+                "organizer": {"@id": org_id},
+            }
+        )
+        graph.append(
+            {
+                "@type": "VideoObject",
+                "@id": f"{canonical}#teaser",
+                "name": "Cherche en Corps — teaser" if lang == "fr" else "Cherche en Corps — teaser",
+                "url": CHERCHE_TEASER_URL,
+                "embedUrl": CHERCHE_TEASER_EMBED,
+                "publisher": {"@id": org_id},
+            }
+        )
+    elif page == "windows.html":
+        graph.append(
+            {
+                "@type": ["CreativeWork", "TheaterEvent"],
+                "@id": f"{canonical}#windows",
+                "name": "WINDOWS",
+                "url": canonical,
+                "description": PAGE_META[page][lang]["description"],
+                "dateCreated": "2025",
+                "creator": {"@type": "Person", "name": "Ouili Nana"},
+                "performer": {"@type": "Person", "name": "Ouili Nana"},
+                "organizer": {"@id": org_id},
+            }
+        )
+
+    return graph
 
 
 def _script_json_payload(html: str, script_type: str, *, close_from_end: bool = False) -> str:
@@ -321,7 +448,7 @@ def replace_remaining_wp_images(html: str) -> str:
     )
     html = re.sub(
         r'href="(https://www\.trois-heures-trente\.com/wp-content/uploads/[^"]+)"',
-        lambda m: f'href="mailto:contact@trois-heures-trente.com?subject=Dossier%20FLEUR"',
+        lambda m: f'href="mailto:{CONTACT_EMAIL}?subject=Dossier%20FLEUR"',
         html,
     )
     return html
@@ -334,7 +461,7 @@ def newsletter_block(lang: str) -> str:
         consent = (
             "J'accepte que mes données (nom, e-mail, ville et organisation) soient enregistrées "
             "pour recevoir la newsletter de la Compagnie THT. Je peux retirer mon consentement "
-            "à tout moment via contact@trois-heures-trente.com (RGPD)."
+            f"à tout moment via {CONTACT_EMAIL} (RGPD)."
         )
         btn, loading = "S'inscrire", "Envoi…"
         ok, err = "Merci, vous êtes inscrit·e.", "Impossible de finaliser l'inscription. Réessayez ou écrivez-nous."
@@ -343,7 +470,7 @@ def newsletter_block(lang: str) -> str:
         l_name, l_email, l_city, l_org = "Name", "Email address", "City (optional)", "Organisation (optional)"
         consent = (
             "I agree that my details (name, email, city, organisation) may be stored to send me "
-            "THT Company news. I can withdraw consent anytime at contact@trois-heures-trente.com (GDPR)."
+            f"THT Company news. I can withdraw consent anytime at {CONTACT_EMAIL} (GDPR)."
         )
         btn, loading = "Subscribe", "Sending…"
         ok, err = "Thank you, you are subscribed.", "We could not complete signup. Please try again or email us."
@@ -618,19 +745,7 @@ def head_block(page: str, lang: str, styles: str) -> str:
   <meta name="twitter:description" content="{meta["description"]}">
   <meta name="twitter:image" content="{og_image}">
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <script type="application/ld+json">{json.dumps({
-        "@context": "https://schema.org",
-        "@type": "PerformingGroup",
-        "name": "Compagnie THT",
-        "alternateName": "Trois Heures Trente",
-        "url": SITE_URL,
-        "email": "contact@trois-heures-trente.com",
-        "sameAs": [
-            "https://www.instagram.com/compagnie_tht/",
-            "https://www.youtube.com/@THTCompagnie",
-            "https://www.linkedin.com/company/compagnie-tht/",
-        ],
-    }, ensure_ascii=False)}</script>
+{ld_json_script_tag(page, lang)}
   <style>{styles}
   @media (max-width: 900px) {{
     [data-screen-label] {{ min-width: 0 !important; }}
@@ -774,6 +889,7 @@ def inject_document_seo(html: str, page: str, lang: str) -> str:
   <meta property="og:image" content="{og}">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+{ld_json_script_tag(page, lang)}
 """
     html = re.sub(r"<title>Bundled Page</title>", block.strip(), html, count=1)
     html = re.sub(r"<html>", f'<html lang="{lang_attr}">', html, count=1)
@@ -795,6 +911,7 @@ def shrink_externalized_manifest(html: str, uuid_map: dict[str, str]) -> str:
 
 
 def patch_template(template: str, page: str, lang: str) -> str:
+    template = fix_contact_email(template)
     template = set_default_locale(template, lang)
     template = fix_bundle_nav_links(template, lang)
     # Keep @font-face src as manifest UUIDs — the bundler split/join would break /assets/fonts/<uuid>.woff2 paths.
@@ -837,6 +954,7 @@ uuid_map_global: dict[str, str] = {}
 
 
 def patch_bundle(html: str, page: str, lang: str) -> str:
+    html = fix_contact_email(html)
     _manifest, template = parse_bundle(html)
     template = patch_template(template, page, lang)
     html = set_bundle_template(html, template)
@@ -871,6 +989,64 @@ def write_robots() -> None:
     )
 
 
+def write_llms_txt() -> None:
+    fr = f"""# Compagnie THT (Trois Heures Trente)
+
+> Compagnie de danse hip-hop et contemporaine, basée à Carrières-sous-Poissy (France) et Oslo (Norvège).
+
+Contact: {CONTACT_EMAIL}
+Site: {SITE_URL}
+
+## Créations
+
+- [FLEUR]({SITE_URL}/fleur): solo hip-hop de Ouili Nana, 50 minutes.
+- [Cherche en Corps]({SITE_URL}/cherche-en-corps): duo de Ouili Nana et Raphaël Saint-Laurent, 50 minutes. Teaser: {CHERCHE_TEASER_URL}
+- [WINDOWS]({SITE_URL}/windows): création 2025, chorégraphie Ouili Nana, trio hip-hop.
+
+## Pages
+
+- [Accueil]({SITE_URL}/)
+- [Ateliers]({SITE_URL}/ateliers)
+- [Contact]({SITE_URL}/contact)
+
+## English
+
+- [Home]({SITE_URL}/en/)
+- [Workshops]({SITE_URL}/en/ateliers)
+- [Contact]({SITE_URL}/en/contact)
+- [FLEUR]({SITE_URL}/en/fleur)
+- [Cherche en Corps]({SITE_URL}/en/cherche-en-corps)
+- [WINDOWS]({SITE_URL}/en/windows)
+"""
+    en = f"""# THT Company (Trois Heures Trente)
+
+> Hip-hop and contemporary dance company based in Carrières-sous-Poissy, France and Oslo, Norway.
+
+Contact: {CONTACT_EMAIL}
+Website: {SITE_URL}
+
+## Works
+
+- [FLEUR]({SITE_URL}/en/fleur): hip-hop solo by Ouili Nana, 50 minutes.
+- [Cherche en Corps]({SITE_URL}/en/cherche-en-corps): duo by Ouili Nana and Raphaël Saint-Laurent, 50 minutes. Teaser: {CHERCHE_TEASER_URL}
+- [WINDOWS]({SITE_URL}/en/windows): 2025 creation choreographed by Ouili Nana, hip-hop trio.
+
+## Pages
+
+- [Home]({SITE_URL}/en/)
+- [Workshops]({SITE_URL}/en/ateliers)
+- [Contact]({SITE_URL}/en/contact)
+
+## Français
+
+- [Accueil]({SITE_URL}/)
+"""
+    (OUT / "llms.txt").write_text(fr, encoding="utf-8")
+    en_dir = OUT / "en"
+    en_dir.mkdir(exist_ok=True)
+    (en_dir / "llms.txt").write_text(en, encoding="utf-8")
+
+
 def main() -> int:
     global uuid_map_global
     LEGACY.mkdir(parents=True, exist_ok=True)
@@ -901,6 +1077,7 @@ def main() -> int:
 
     write_sitemap()
     write_robots()
+    write_llms_txt()
 
     raw_dir = ASSETS / "_raw"
     if raw_dir.exists():

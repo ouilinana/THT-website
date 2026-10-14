@@ -12,6 +12,18 @@
 		reverse_proxy 127.0.0.1:8000
 	}
 
+	handle /llms.txt {
+		root * /srv
+		header Content-Type "text/plain; charset=utf-8"
+		file_server
+	}
+
+	handle /en/llms.txt {
+		root * /srv
+		header Content-Type "text/plain; charset=utf-8"
+		file_server
+	}
+
 	handle {
 		root * /srv
 		encode gzip zstd

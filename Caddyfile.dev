@@ -9,6 +9,18 @@
 		reverse_proxy 127.0.0.1:8000
 	}
 
+	handle /llms.txt {
+		root * /workspace
+		header Content-Type "text/plain; charset=utf-8"
+		file_server
+	}
+
+	handle /en/llms.txt {
+		root * /workspace
+		header Content-Type "text/plain; charset=utf-8"
+		file_server
+	}
+
 	handle {
 		root * /workspace
 		encode gzip zstd
