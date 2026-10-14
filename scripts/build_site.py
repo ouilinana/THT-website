@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build static HTML from legacy bundled pages (editable source of truth: scripts/ + assets/)."""
+"""Patch production Claude bundles (legacy/bundles/) → deployable HTML + /assets."""
 
 from __future__ import annotations
 
@@ -31,18 +31,18 @@ FLEUR_HERO = f"{FLEUR_DIR}/hero.webp"
 FLEUR_OG = f"{SITE_URL}{FLEUR_DIR}/og-fleur.webp"
 FLEUR_GALLERY = [f"{FLEUR_DIR}/g{i:02d}.webp" for i in range(1, 9)]
 
-WINDOWS_DIR = "/assets/images/windows"
-WINDOWS_HERO = f"{WINDOWS_DIR}/hero.webp"
-WINDOWS_OG = f"{SITE_URL}{WINDOWS_DIR}/og-windows.webp"
-WINDOWS_GALLERY = [f"{WINDOWS_DIR}/g{i:02d}.webp" for i in range(1, 4)]
-
 WP_REPLACEMENTS = {
-    "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-114-scaled.jpg": f"{WINDOWS_DIR}/g01.webp",
+    "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-114-scaled.jpg": "/assets/images/windows-hero.webp",
     "https://www.trois-heures-trente.com/wp-content/uploads/2023/08/Ouili_fleur-63-scaled.jpg": f"{FLEUR_DIR}/tile.webp",
-    "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-241-scaled.jpg": f"{WINDOWS_DIR}/tile.webp",
+    "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-241-scaled.jpg": "/assets/images/cherche-tile.webp",
     "https://www.trois-heures-trente.com/wp-content/uploads/2023/08/Ouili_fleur-52-2-scaled.jpg": FLEUR_HERO,
-    "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-329-scaled.jpg": WINDOWS_HERO,
-    "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/Portrait-de-CEC-FR-Presentation-1-768x1024.png": "/assets/docs/THT_Cherche-en-corps_01_presentation.pdf",
+    "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-329-scaled.jpg": "/assets/images/windows-hero.webp",
+    "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/Portrait-de-CEC-FR-Presentation-1-768x1024.png": CEC_PDF,
+}
+
+FLEUR_WP_TO_ASSET = {
+    "https://www.trois-heures-trente.com/wp-content/uploads/2023/08/Ouili_fleur-52-2-scaled.jpg": FLEUR_HERO,
+    "https://www.trois-heures-trente.com/wp-content/uploads/2023/08/Ouili_fleur-63-scaled.jpg": f"{FLEUR_DIR}/tile.webp",
 }
 
 PAGE_META: dict[str, dict[str, str]] = {
@@ -109,8 +109,8 @@ PAGE_META: dict[str, dict[str, str]] = {
 }
 
 
-def parse_bundle(path: Path) -> tuple[dict, str]:
-    text = path.read_text(encoding="utf-8")
+def parse_bundle(path: Path | str) -> tuple[dict, str]:
+    text = path if isinstance(path, str) else path.read_text(encoding="utf-8")
     manifest = json.loads(
         re.search(r'<script type="__bundler/manifest">(.*?)</script>', text, re.DOTALL).group(1)
     )
@@ -256,9 +256,19 @@ def strip_react_artifacts(html: str) -> str:
     return html
 
 
+def replace_url_everywhere(text: str, old: str, new: str) -> str:
+    text = text.replace(old, new)
+    esc = old.replace("/", "\\/")
+    if esc != old:
+        text = text.replace(esc, new.replace("/", "\\/"))
+    return text
+
+
 def fix_wp_urls(html: str) -> str:
     for old, new in WP_REPLACEMENTS.items():
-        html = html.replace(old, new)
+        html = replace_url_everywhere(html, old, new)
+    for old, new in FLEUR_WP_TO_ASSET.items():
+        html = replace_url_everywhere(html, old, new)
     return replace_remaining_wp_images(html)
 
 
@@ -470,44 +480,6 @@ def apply_fleur_images(html: str) -> str:
     return html
 
 
-def apply_windows_images(html: str, lang: str) -> str:
-    """Hero + gallery from Photos JAY (assets/images/windows/)."""
-    html = re.sub(
-        r'(<div style="position:relative;height:620px;overflow:hidden[^"]*">\s*)'
-        r'<img src="[^"]+" alt="WINDOWS[^"]*" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">',
-        rf'\1<img src="{WINDOWS_HERO}" alt="WINDOWS — trio sous les fenêtres de lumière" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">',
-        html,
-        count=1,
-    )
-    gallery_imgs = "".join(
-        f'<img src="{src}" alt="WINDOWS" style="width:100%;aspect-ratio:4/3;object-fit:cover;display:block">'
-        for src in WINDOWS_GALLERY
-    )
-    html = re.sub(
-        r'<div style="display:grid;grid-template-columns:repeat\([348],1fr\);gap:1px;background:rgba\(233,236,242,.12\);border-top:1px solid rgba\(233,236,242,.12\);border-bottom:1px solid rgba\(233,236,242,.12\)">\s*'
-        r'(?:<img src="[^"]+" alt="WINDOWS[^"]*" style="width:100%;aspect-ratio:4/3;object-fit:cover;display:block">\s*)+'
-        r"</div>",
-        f'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:rgba(233,236,242,.12);border-top:1px solid rgba(233,236,242,.12);border-bottom:1px solid rgba(233,236,242,.12)">{gallery_imgs}</div>',
-        html,
-        count=1,
-    )
-    credit = "Photos: Jay" if lang == "en" else "Photos : Jay"
-    credit_block = (
-        f'<div style="padding:4px 44px 20px;font:400 10px \'IBM Plex Mono\',monospace;'
-        f'color:rgba(233,236,242,.38);text-align:right">{credit}</div>\n  '
-    )
-    html = re.sub(
-        r"(<div style=\"display:grid;grid-template-columns:repeat\(3,1fr\);gap:1px;background:rgba\(233,236,242,.12\);border-top:1px solid rgba\(233,236,242,.12\);border-bottom:1px solid rgba\(233,236,242,.12\)\">"
-        r".*?</div>\s*)"
-        r"(<div style=\"display:flex;justify-content:space-between;align-items:center;gap:40px;padding:40px 44px;border-bottom:1px solid rgba\(233,236,242,.12\)\">)",
-        lambda m: m.group(1) + credit_block + m.group(2),
-        html,
-        count=1,
-        flags=re.DOTALL,
-    )
-    return html
-
-
 def fix_pronouns(html: str) -> str:
     # Bundler artifact in EN ateliers copy; Ouili Nana uses he/him elsewhere.
     html = re.sub(
@@ -628,6 +600,155 @@ def build_page(page: str, lang: str, body: str, styles: str) -> str:
     return head_block(page, lang, styles) + html + "\n</body>\n</html>\n"
 
 
+def apply_fleur_gallery(template: str) -> str:
+    """Map FLEUR Drive WebPs onto the bundled gallery grid (production layout)."""
+    gallery_imgs = "".join(
+        f'<img src="{src}" alt="FLEUR — LeDockerNoir" style="width:100%;aspect-ratio:4/5;object-fit:cover;display:block">'
+        for src in [f"{FLEUR_DIR}/g{i:02d}.webp" for i in range(1, 9)]
+    )
+    return re.sub(
+        r'<div style="display:grid;grid-template-columns:repeat\(4,1fr\);gap:1px;background:rgba\(233,236,242,.12\);border-top:1px solid rgba\(233,236,242,.12\);border-bottom:1px solid rgba\(233,236,242,.12\)">\s*'
+        r'(?:<img src="[^"]+" alt="FLEUR[^"]*" style="width:100%;aspect-ratio:4/5;object-fit:cover;display:block">\s*)+'
+        r"</div>",
+        f'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:rgba(233,236,242,.12);border-top:1px solid rgba(233,236,242,.12);border-bottom:1px solid rgba(233,236,242,.12)">{gallery_imgs}</div>',
+        template,
+        count=1,
+    )
+
+
+def set_bundle_template(html: str, template: str) -> str:
+    payload = json.dumps(template, ensure_ascii=False)
+    return re.sub(
+        r'(<script type="__bundler/template">)(.*?)(</script>)',
+        lambda m: m.group(1) + payload + m.group(3),
+        html,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+
+def set_default_locale(template: str, lang: str) -> str:
+    if lang != "en":
+        return template
+    template = template.replace(
+        '<sc-if value="{{ isFr }}" hint-placeholder-val="{{ true }}">',
+        '<sc-if value="{{ isFr }}" hint-placeholder-val="{{ false }}">',
+        1,
+    )
+    template = template.replace(
+        '<sc-if value="{{ isEn }}" hint-placeholder-val="{{ false }}">',
+        '<sc-if value="{{ isEn }}" hint-placeholder-val="{{ true }}">',
+        1,
+    )
+    return template
+
+
+def fix_bundle_nav_links(template: str, lang: str) -> str:
+    if lang == "fr":
+        for name in PAGES:
+            base = name.replace(".html", "")
+            template = template.replace(f'href="{name}"', f'href="/{base}"')
+        return template
+    for name in PAGES:
+        base = name.replace(".html", "")
+        en_path = "/en/" if name == "index.html" else f"/en/{base}"
+        template = template.replace(f'href="{name}"', f'href="{en_path}"')
+    return template
+
+
+def inject_document_seo(html: str, page: str, lang: str) -> str:
+    meta = PAGE_META[page][lang]
+    slug = page.replace(".html", "")
+    if slug == "index":
+        path = "/" if lang == "fr" else "/en/"
+    else:
+        path = f"/{slug}" if lang == "fr" else f"/en/{slug}"
+    canonical = SITE_URL + path
+    alt_fr = SITE_URL + (f"/{slug}" if slug != "index" else "/")
+    alt_en = SITE_URL + (f"/en/{slug}" if slug != "index" else "/en/")
+    og = FLEUR_OG if page == "fleur.html" else f"{SITE_URL}/assets/images/og-default.webp"
+    lang_attr = "fr" if lang == "fr" else "en"
+    block = f"""
+  <title>{meta["title"]}</title>
+  <meta name="description" content="{meta["description"]}">
+  <link rel="canonical" href="{canonical}">
+  <link rel="alternate" hreflang="fr" href="{alt_fr}">
+  <link rel="alternate" hreflang="en" href="{alt_en}">
+  <link rel="alternate" hreflang="x-default" href="{alt_fr}">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Compagnie THT">
+  <meta property="og:title" content="{meta["title"]}">
+  <meta property="og:description" content="{meta["description"]}">
+  <meta property="og:url" content="{canonical}">
+  <meta property="og:image" content="{og}">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+"""
+    html = re.sub(r"<title>Bundled Page</title>", block.strip(), html, count=1)
+    html = re.sub(r"<html>", f'<html lang="{lang_attr}">', html, count=1)
+    return html
+
+
+def shrink_externalized_manifest(html: str, uuid_map: dict[str, str]) -> str:
+    m = re.search(r'(<script type="__bundler/manifest">)(.*?)(</script>)', html, re.DOTALL)
+    if not m:
+        return html
+    manifest = json.loads(m.group(2))
+    for uid in uuid_map:
+        entry = manifest.get(uid)
+        if isinstance(entry, dict) and entry.get("mime", "").startswith("image/"):
+            entry["data"] = ""
+            entry["compressed"] = False
+    payload = json.dumps(manifest, ensure_ascii=False, separators=(",", ":"))
+    return html[: m.start(2)] + payload + html[m.end(2) :]
+
+
+def patch_template(template: str, page: str, lang: str) -> str:
+    template = set_default_locale(template, lang)
+    template = fix_bundle_nav_links(template, lang)
+    template = replace_uuids(template, uuid_map_global)
+    template = fix_wp_urls(template)
+    template = fix_pronouns(template)
+    if page == "cherche-en-corps.html":
+        template = fix_cherche_videos(template, "fr")
+        template = fix_cherche_videos(template, "en")
+        template = fix_dossier_links(template, page)
+    if page == "contact.html":
+        template = fix_dossier_links(template, page)
+    if page == "fleur.html":
+        template = apply_fleur_gallery(template)
+    if page == "index.html":
+        template = fix_newsletter(template, "fr")
+        template = fix_newsletter(template, "en")
+        template = template.replace(
+            "https://www.youtube.com/watch?v=K9OICzieSfc",
+            "https://www.youtube.com/watch?v=TjewwAOC488",
+        )
+        template = template.replace(
+            "▶ Cherche en Corps à San Francisco",
+            "▶ Cherche en Corps — teaser",
+        )
+        template = template.replace(
+            "▶ Cherche en Corps in San Francisco",
+            "▶ Cherche en Corps — teaser",
+        )
+    return template
+
+
+uuid_map_global: dict[str, str] = {}
+
+
+def patch_bundle(html: str, page: str, lang: str) -> str:
+    _manifest, template = parse_bundle(html)
+    template = patch_template(template, page, lang)
+    html = set_bundle_template(html, template)
+    html = replace_uuids(html, uuid_map_global)
+    html = fix_wp_urls(html)
+    # Manifest shrink disabled: bundler still walks all manifest entries at boot.
+    html = inject_document_seo(html, page, lang)
+    return html
+
+
 def write_sitemap() -> None:
     urls = []
     for page in PAGES:
@@ -655,15 +776,18 @@ def write_robots() -> None:
 
 
 def main() -> int:
+    global uuid_map_global
     LEGACY.mkdir(parents=True, exist_ok=True)
-    for page in PAGES:
-        src = OUT / page
-        if src.exists() and not (LEGACY / page).exists():
-            shutil.copy2(src, LEGACY / page)
+    missing = [p for p in PAGES if not (LEGACY / p).exists()]
+    if missing:
+        print(
+            "Missing legacy bundles (restore from main): " + ", ".join(missing),
+            file=sys.stderr,
+        )
+        return 1
 
-    uuid_map = collect_assets()
+    uuid_map_global = collect_assets()
 
-    # Map legacy WP URLs from root-level extracted webps (Cherche, etc.)
     img_dir = ASSETS / "images"
     images = sorted(p for p in img_dir.glob("*.webp") if p.is_file())
     if images:
@@ -673,26 +797,25 @@ def main() -> int:
                 WP_REPLACEMENTS[
                     "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-241-scaled.jpg"
                 ] = f"/assets/images/{im.name}"
+            if "cherche" in n and "san" in n:
+                WP_REPLACEMENTS[
+                    "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-329-scaled.jpg"
+                ] = f"/assets/images/{im.name}"
+        hero = max(images, key=lambda p: p.stat().st_size)
+        WP_REPLACEMENTS[
+            "https://www.trois-heures-trente.com/wp-content/uploads/2025/08/THT-114-scaled.jpg"
+        ] = f"/assets/images/{hero.name}"
         og = ASSETS / "images" / "og-default.webp"
         if not og.exists():
-            hero = max(images, key=lambda p: p.stat().st_size)
             shutil.copy2(hero, og)
 
+    en_dir = OUT / "en"
+    en_dir.mkdir(exist_ok=True)
     for page in PAGES:
-        manifest, template = parse_bundle(LEGACY / page)
-        _ = manifest
-        styles = extract_helmet_styles(template)
-        styles = replace_uuids(styles, uuid_map)
-        fr_body, en_body = split_locales(template)
-        fr_html = build_page(page, "fr", replace_uuids(fr_body, uuid_map), styles)
-        en_html = build_page(page, "en", replace_uuids(en_body, uuid_map), styles)
-
-        out_path = OUT / page if page != "index.html" else OUT / "index.html"
-        out_path.write_text(fr_html, encoding="utf-8")
-        en_dir = OUT / "en"
-        en_dir.mkdir(exist_ok=True)
+        raw = (LEGACY / page).read_text(encoding="utf-8")
+        (OUT / page).write_text(patch_bundle(raw, page, "fr"), encoding="utf-8")
         en_name = "index.html" if page == "index.html" else page
-        (en_dir / en_name).write_text(en_html, encoding="utf-8")
+        (en_dir / en_name).write_text(patch_bundle(raw, page, "en"), encoding="utf-8")
 
     write_sitemap()
     write_robots()
@@ -701,7 +824,7 @@ def main() -> int:
     if raw_dir.exists():
         shutil.rmtree(raw_dir)
 
-    print("Built static site.", file=sys.stderr)
+    print("Patched bundled pages.", file=sys.stderr)
     return 0
 
 
