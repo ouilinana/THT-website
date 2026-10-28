@@ -32,9 +32,18 @@ Public contact email: `compagnie.tht@gmail.com`.
 
 Home newsletter block posts to `POST /api/subscribe`. Docker runs Caddy + Python API on `127.0.0.1:8000`.
 
-The contact page form posts JSON to `POST /api/contact`. Each message is saved to Notion (`NOTION_CONTACT_DATABASE_ID`, or `NOTION_DATABASE_ID` if unset) and emailed to `NOTIFY_TO` with Reply-To set to the sender. The request succeeds if either Notion or email works.
+The contact page form posts JSON to `POST /api/contact`. Each message is saved to Notion (`NOTION_CONTACT_DATABASE_ID`, or `NOTION_DATABASE_ID` if unset) and emailed to `NOTIFY_TO` with Reply-To set to the sender. The request succeeds if either Notion or email works; if both fail the API still answers JSON (`503`, `{"ok": false, "code": "delivery"}`) and the page shows its error line.
 
-See `.env.example` for Notion + Infomaniak SMTP variables.
+### Notification email
+
+Contact messages and newsletter signups send a notification to `NOTIFY_TO`:
+
+- If `RESEND_API_KEY` is set, it goes through the [Resend](https://resend.com) HTTPS API (`POST https://api.resend.com/emails`) from `RESEND_FROM` (default `THT site <onboarding@resend.dev>`). Use this on Railway, which blocks outbound SMTP on non-Pro plans. The default test sender only delivers to the Resend account owner's address, so `NOTIFY_TO` must be that address until a domain is verified in Resend.
+- Otherwise it falls back to SMTP (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`).
+
+Reply-To is set to the visitor, so replying from the inbox answers them directly. Notion and email calls time out after 10 seconds, and a failed notification never fails a newsletter signup that was saved in Notion.
+
+See `.env.example` for all variables.
 
 ## Deploy
 

@@ -16,7 +16,7 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from api.contact_service import ContactInput, handle_contact  # noqa: E402
-from api.subscribe_service import SubscribeInput, subscribe  # noqa: E402
+from api.subscribe_service import SubscribeInput, SubscribeResult, subscribe  # noqa: E402
 
 
 def _client_ip(headers: dict[str, str]) -> str:
@@ -118,14 +118,21 @@ class Handler(BaseHTTPRequestHandler):
         )
 
         test_mode = os.environ.get("SUBSCRIBE_TEST_MODE", "") == "1"
-        result = subscribe(inp, test_mode=test_mode)
+        try:
+            result = subscribe(inp, test_mode=test_mode)
+        except Exception as exc:  # noqa: BLE001 - e.g. Notion down; answer instead of dropping the connection
+            sys.stderr.write(f"[subscribe] failed: {exc!r}\n")
+            result = SubscribeResult(False, "server", "Server error")
 
         wants_json = "application/json" in self.headers.get("Accept", "") or fields.get(
             "ajax", ""
         ) in ("1", "true")
 
         if wants_json:
-            self.send_response(200 if result.ok else 400)
+            status = 200 if result.ok else 400
+            if result.code in ("config", "server"):
+                status = 503
+            self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             payload = {"ok": result.ok, "code": result.code, "message": result.message}
@@ -153,11 +160,13 @@ class Handler(BaseHTTPRequestHandler):
             result = handle_contact(inp)
         except Exception as exc:  # noqa: BLE001 - always answer the browser with JSON
             sys.stderr.write(f"[contact] unexpected error: {exc!r}\n")
-            self._send_json(500, {"ok": False, "code": "server", "message": "Server error"})
+            self._send_json(503, {"ok": False, "code": "server", "message": "Server error"})
             return
         status = 200 if result.ok else (429 if result.code == "rate_limit" else 400)
         if result.code in ("config", "delivery"):
-            status = 502
+            # 503 with a JSON body: the upstream answered, it just could not deliver.
+            # (502 is what Caddy and Railway use when the app itself is unreachable.)
+            status = 503
         self._send_json(status, {"ok": result.ok, "code": result.code, "message": result.message})
 
 

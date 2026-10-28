@@ -1,17 +1,15 @@
-"""Contact form: save the message to Notion and email a notification over SMTP."""
+"""Contact form: save the message to Notion and email a notification (Resend or SMTP)."""
 
 from __future__ import annotations
 
 import os
-import smtplib
-import ssl
 import sys
 import time
 from collections import defaultdict
 from dataclasses import dataclass
-from email.message import EmailMessage
 from typing import Any
 
+from api.mailer import backend, notify_to, send_notification
 from api.subscribe_service import (
     EMAIL_RE,
     NotionClient,
@@ -21,7 +19,6 @@ from api.subscribe_service import (
     _title_prop,
 )
 
-DEFAULT_NOTIFY_TO = "compagnie.tht@gmail.com"
 SOURCE_VALUE = "Website contact form"
 TOPICS = {
     "booking": "Programmer un spectacle / Book a show",
@@ -174,13 +171,10 @@ def save_to_notion(inp: ContactInput, token: str, db_id: str) -> None:
     )
 
 
-def build_email(inp: ContactInput, smtp_from: str, notify_to: str) -> EmailMessage:
-    msg = EmailMessage()
-    msg["Subject"] = f"[THT Contact] {TOPICS[inp.topic]} - {inp.name}"
-    msg["From"] = smtp_from
-    msg["To"] = notify_to
-    msg["Reply-To"] = inp.email
-    msg.set_content(
+def build_notification(inp: ContactInput) -> tuple[str, str]:
+    """Return (subject, text) for the notification email."""
+    subject = f"[THT Contact] {TOPICS[inp.topic]} - {inp.name}"
+    text = (
         f"New message from the website contact form ({inp.lang})\n\n"
         f"Name: {inp.name}\n"
         f"Email: {inp.email}\n"
@@ -188,20 +182,7 @@ def build_email(inp: ContactInput, smtp_from: str, notify_to: str) -> EmailMessa
         f"Topic: {TOPICS[inp.topic]}\n\n"
         f"{inp.message}\n"
     )
-    return msg
-
-
-def send_email(msg: EmailMessage, host: str, port: int, user: str, password: str) -> None:
-    context = ssl.create_default_context()
-    if port == 465:
-        with smtplib.SMTP_SSL(host, port, context=context, timeout=15) as smtp:
-            smtp.login(user, password)
-            smtp.send_message(msg)
-    else:
-        with smtplib.SMTP(host, port, timeout=15) as smtp:
-            smtp.starttls(context=context)
-            smtp.login(user, password)
-            smtp.send_message(msg)
+    return subject, text
 
 
 def _log(msg: str) -> None:
@@ -220,13 +201,10 @@ def handle_contact(inp: ContactInput, *, test_mode: bool = False) -> ContactResu
 
     token = os.environ.get("NOTION_TOKEN", "")
     db_id = os.environ.get("NOTION_CONTACT_DATABASE_ID", "") or os.environ.get("NOTION_DATABASE_ID", "")
-    smtp_host = os.environ.get("SMTP_HOST", "")
-    smtp_user = os.environ.get("SMTP_USER", "")
-    smtp_from = os.environ.get("SMTP_FROM", "") or smtp_user
     notion_ready = bool(token and db_id)
-    smtp_ready = bool(smtp_host and smtp_user and smtp_from)
-    if not notion_ready and not smtp_ready:
-        _log("neither Notion nor SMTP is configured")
+    mail_backend = backend()
+    if not notion_ready and not mail_backend:
+        _log("neither Notion nor email (RESEND_API_KEY or SMTP_*) is configured")
         return ContactResult(False, "config", "Service not configured")
 
     saved = emailed = False
@@ -236,21 +214,15 @@ def handle_contact(inp: ContactInput, *, test_mode: bool = False) -> ContactResu
             saved = True
         except Exception as exc:  # noqa: BLE001 - keep going so the email still goes out
             _log(f"Notion save failed: {exc!r}")
-    if smtp_ready:
+    if mail_backend:
         try:
-            msg = build_email(inp, smtp_from, os.environ.get("NOTIFY_TO", "") or DEFAULT_NOTIFY_TO)
-            send_email(
-                msg,
-                smtp_host,
-                int(os.environ.get("SMTP_PORT", "465") or 465),
-                smtp_user,
-                os.environ.get("SMTP_PASS", ""),
-            )
+            subject, text = build_notification(inp)
+            send_notification(subject=subject, text=text, reply_to=inp.email, to=notify_to())
             emailed = True
         except Exception as exc:  # noqa: BLE001
-            _log(f"SMTP notification failed: {exc!r}")
+            _log(f"{mail_backend} notification failed: {exc!r}")
 
-    _log(f"from={inp.email} topic={inp.topic} notion={saved} email={emailed}")
+    _log(f"from={inp.email} topic={inp.topic} notion={saved} email={emailed} via={mail_backend}")
     if saved or emailed:
         return ContactResult(True, "ok", "Sent")
     return ContactResult(False, "delivery", "Could not deliver message")

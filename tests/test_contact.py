@@ -3,9 +3,10 @@ import unittest
 from unittest.mock import patch
 
 import api.contact_service as cs
-from api.contact_service import ContactInput, build_email, build_notion_page, handle_contact, normalize, validate
+from api.contact_service import ContactInput, build_notification, build_notion_page, handle_contact, normalize, validate
 
 ENV = {
+    "RESEND_API_KEY": "",
     "NOTION_TOKEN": "dummy",
     "NOTION_DATABASE_ID": "db123",
     "SMTP_HOST": "smtp.example.com",
@@ -60,28 +61,28 @@ class ContactPayloadTests(unittest.TestCase):
         self.assertIn("Website contact form", props["Notes"]["rich_text"][0]["text"]["content"])
         self.assertTrue(children)
 
-    def test_email_headers(self):
-        msg = build_email(make("10.0.1.2"), "site@example.com", "compagnie.tht@gmail.com")
-        self.assertEqual(msg["To"], "compagnie.tht@gmail.com")
-        self.assertEqual(msg["Reply-To"], "jean@example.com")
-        self.assertIn("Jean Dupont", msg["Subject"])
-        self.assertIn("une date en mai", msg.get_content())
+    def test_notification_text(self):
+        subject, text = build_notification(make("10.0.1.2"))
+        self.assertIn("Jean Dupont", subject)
+        self.assertIn("une date en mai", text)
+        self.assertIn("jean@example.com", text)
 
 
 class HandleContactTests(unittest.TestCase):
     @patch.dict(os.environ, ENV, clear=False)
     def test_saves_and_emails(self):
-        with patch.object(cs, "save_to_notion") as notion, patch.object(cs, "send_email") as smtp:
+        with patch.object(cs, "save_to_notion") as notion, patch.object(cs, "send_notification") as smtp:
             r = handle_contact(make("10.0.2.1"))
         self.assertTrue(r.ok)
         notion.assert_called_once()
         smtp.assert_called_once()
-        self.assertEqual(smtp.call_args[0][0]["To"], "compagnie.tht@gmail.com")
+        self.assertEqual(smtp.call_args.kwargs["to"], "compagnie.tht@gmail.com")
+        self.assertEqual(smtp.call_args.kwargs["reply_to"], "jean@example.com")
 
     @patch.dict(os.environ, ENV, clear=False)
     def test_email_still_sent_when_notion_fails(self):
         with patch.object(cs, "save_to_notion", side_effect=RuntimeError("401")), \
-                patch.object(cs, "send_email") as smtp:
+                patch.object(cs, "send_notification") as smtp:
             r = handle_contact(make("10.0.2.2"))
         self.assertTrue(r.ok)
         smtp.assert_called_once()
@@ -89,12 +90,19 @@ class HandleContactTests(unittest.TestCase):
     @patch.dict(os.environ, ENV, clear=False)
     def test_error_when_both_fail(self):
         with patch.object(cs, "save_to_notion", side_effect=RuntimeError("401")), \
-                patch.object(cs, "send_email", side_effect=OSError("refused")):
+                patch.object(cs, "send_notification", side_effect=OSError("refused")):
             r = handle_contact(make("10.0.2.3"))
         self.assertFalse(r.ok)
 
+    @patch.dict(os.environ, {"NOTION_TOKEN": "", "NOTION_DATABASE_ID": "", "NOTION_CONTACT_DATABASE_ID": "",
+                             "SMTP_HOST": "", "RESEND_API_KEY": ""}, clear=False)
+    def test_config_error_when_nothing_configured(self):
+        r = handle_contact(make("10.0.2.5"))
+        self.assertFalse(r.ok)
+        self.assertEqual(r.code, "config")
+
     def test_test_mode_skips_delivery(self):
-        with patch.object(cs, "save_to_notion") as notion, patch.object(cs, "send_email") as smtp:
+        with patch.object(cs, "save_to_notion") as notion, patch.object(cs, "send_notification") as smtp:
             r = handle_contact(make("10.0.2.4"), test_mode=True)
         self.assertTrue(r.ok)
         notion.assert_not_called()
