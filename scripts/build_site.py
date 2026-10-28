@@ -910,6 +910,126 @@ def shrink_externalized_manifest(html: str, uuid_map: dict[str, str]) -> str:
     return html[: m.start(2)] + payload + html[m.end(2) :]
 
 
+# Contact form: the bundled design component only toggled a "sent" flag and never
+# sent anything. Wire the fields to POST /api/contact without touching the layout.
+CONTACT_COMPONENT_SCRIPT = r"""
+class Component extends DCLogic {
+  state = {
+    lang: (typeof localStorage !== 'undefined' && localStorage.getItem('tht-lang')) || (this.props.defaultLang ?? 'fr'),
+    topic: 'booking', sent: false, sending: false, error: ''
+  };
+  submit() {
+    if (this.state.sending) return;
+    const form = document.querySelector('[data-tht-contact]');
+    const val = (n) => { const el = form && form.querySelector('[name="' + n + '"]'); return el ? String(el.value || '').trim() : ''; };
+    const data = {
+      name: val('name'), email: val('email'), organisation: val('organisation'), message: val('message'),
+      company_website: val('company_website'), topic: this.state.topic, lang: this.state.lang === 'en' ? 'en' : 'fr'
+    };
+    if (data.name.length < 2 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(data.email) || !data.message) {
+      this.setState({ error: 'invalid' });
+      return;
+    }
+    this.setState({ sending: true, error: '' });
+    fetch('/api/contact', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(data)
+    })
+      .then((r) => r.json().catch(() => ({})).then((j) => ({ ok: r.ok && !!(j && j.ok), code: j && j.code })))
+      .then((res) => {
+        if (res.ok) this.setState({ sending: false, sent: true, error: '', topic: 'booking' });
+        else this.setState({ sending: false, error: res.code === 'rate_limit' ? 'rate' : 'server' });
+      })
+      .catch(() => this.setState({ sending: false, error: 'server' }));
+  }
+  renderVals() {
+    const set = (l) => { try { localStorage.setItem('tht-lang', l); } catch (e) {} this.setState({ lang: l }); };
+    const base = 'border:1px solid rgba(233,236,242,.25);padding:9px 16px;cursor:pointer;user-select:none';
+    const on = 'border:1px solid #5ec9ff;color:#5ec9ff;padding:9px 16px;cursor:pointer;user-select:none';
+    const chip = (t) => this.state.topic === t ? on : base;
+    const mail = 'compagnie.tht@gmail.com';
+    const errors = {
+      fr: {
+        invalid: 'Merci d\u2019indiquer votre nom, un email valide et un message.',
+        rate: 'Trop de messages envoy\u00e9s. R\u00e9essayez plus tard ou \u00e9crivez-nous \u00e0 ' + mail + '.',
+        server: 'L\u2019envoi a \u00e9chou\u00e9. R\u00e9essayez ou \u00e9crivez-nous \u00e0 ' + mail + '.'
+      },
+      en: {
+        invalid: 'Please enter your name, a valid email and a message.',
+        rate: 'Too many messages sent. Please try again later or email us at ' + mail + '.',
+        server: 'Sending failed. Please try again or email us at ' + mail + '.'
+      }
+    };
+    const err = this.state.error;
+    return {
+      isFr: this.state.lang !== 'en', isEn: this.state.lang === 'en',
+      setFr: () => set('fr'), setEn: () => set('en'),
+      notSent: !this.state.sent, sent: this.state.sent,
+      send: () => this.submit(), reset: () => this.setState({ sent: false, error: '' }),
+      sendLabelFr: this.state.sending ? 'envoi\u2026' : 'envoyer \u2192',
+      sendLabelEn: this.state.sending ? 'sending\u2026' : 'send \u2192',
+      hasError: !!err, errorFr: err ? errors.fr[err] : '', errorEn: err ? errors.en[err] : '',
+      chipBooking: chip('booking'), chipAtelier: chip('atelier'), chipEvent: chip('event'), chipAutre: chip('autre'),
+      pickBooking: () => this.setState({ topic: 'booking' }), pickAtelier: () => this.setState({ topic: 'atelier' }),
+      pickEvent: () => this.setState({ topic: 'event' }), pickAutre: () => this.setState({ topic: 'autre' })
+    };
+  }
+}
+"""
+
+_CONTACT_INPUT_STYLE = "background:transparent;border:1px solid rgba(233,236,242,.25);color:#e9ecf2;padding:14px 16px;font:400 12px 'IBM Plex Mono',monospace;outline:none"
+_CONTACT_SEND_STYLE = "align-self:flex-start;background:#5ec9ff;color:#08090c;padding:14px 28px;font:500 13px 'IBM Plex Mono',monospace;cursor:pointer"
+_CONTACT_HONEYPOT = (
+    '<input name="company_website" tabindex="-1" autocomplete="off" aria-hidden="true" '
+    'style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">'
+)
+
+
+def fix_contact_form(template: str) -> str:
+    """Make the bundled contact form actually send (idempotent)."""
+    if "data-tht-contact" in template:
+        return template
+    replacements = [
+        # Wrapper the component uses to find the visible form's fields.
+        (
+            '<sc-if value="{{ notSent }}" hint-placeholder-val="{{ true }}">\n      <div style="display:flex;flex-direction:column;gap:18px">',
+            '<sc-if value="{{ notSent }}" hint-placeholder-val="{{ true }}">\n      <div data-tht-contact="" style="display:flex;flex-direction:column;gap:18px;position:relative">'
+            + _CONTACT_HONEYPOT,
+        ),
+        (f'<input placeholder="nom / prénom" style="{_CONTACT_INPUT_STYLE}">',
+         f'<input name="name" autocomplete="name" maxlength="200" placeholder="nom / prénom" style="{_CONTACT_INPUT_STYLE}">'),
+        (f'<input placeholder="name" style="{_CONTACT_INPUT_STYLE}">',
+         f'<input name="name" autocomplete="name" maxlength="200" placeholder="name" style="{_CONTACT_INPUT_STYLE}">'),
+        (f'<input placeholder="email" style="{_CONTACT_INPUT_STYLE}">',
+         f'<input name="email" type="email" autocomplete="email" maxlength="320" placeholder="email" style="{_CONTACT_INPUT_STYLE}">'),
+        (f'<input placeholder="structure / théâtre / collectivité (optionnel)" style="{_CONTACT_INPUT_STYLE}">',
+         f'<input name="organisation" autocomplete="organization" maxlength="300" placeholder="structure / théâtre / collectivité (optionnel)" style="{_CONTACT_INPUT_STYLE}">'),
+        (f'<input placeholder="venue / organization (optional)" style="{_CONTACT_INPUT_STYLE}">',
+         f'<input name="organisation" autocomplete="organization" maxlength="300" placeholder="venue / organization (optional)" style="{_CONTACT_INPUT_STYLE}">'),
+        ('<textarea placeholder=', '<textarea name="message" maxlength="5000" placeholder='),
+        (
+            f'<div sc-camel-on-click="{{{{ send }}}}" style-hover="background:#8ad8ff" style="{_CONTACT_SEND_STYLE}">envoyer →</div>',
+            f'<div role="button" tabindex="0" sc-camel-on-click="{{{{ send }}}}" style-hover="background:#8ad8ff" style="{_CONTACT_SEND_STYLE}">{{{{ sendLabelFr }}}}</div>\n'
+            "        <sc-if value=\"{{ hasError }}\" hint-placeholder-val=\"{{ false }}\"><p role=\"alert\" style=\"margin:0;font:400 12px/1.7 'IBM Plex Mono',monospace;color:#ff8a80\">{{ errorFr }}</p></sc-if>",
+        ),
+        (
+            f'<div sc-camel-on-click="{{{{ send }}}}" style-hover="background:#8ad8ff" style="{_CONTACT_SEND_STYLE}">send →</div>',
+            f'<div role="button" tabindex="0" sc-camel-on-click="{{{{ send }}}}" style-hover="background:#8ad8ff" style="{_CONTACT_SEND_STYLE}">{{{{ sendLabelEn }}}}</div>\n'
+            "        <sc-if value=\"{{ hasError }}\" hint-placeholder-val=\"{{ false }}\"><p role=\"alert\" style=\"margin:0;font:400 12px/1.7 'IBM Plex Mono',monospace;color:#ff8a80\">{{ errorEn }}</p></sc-if>",
+        ),
+    ]
+    for old, new in replacements:
+        count = template.count(old)
+        if count == 0:
+            raise RuntimeError(f"contact form markup not found: {old[:80]!r}")
+        template = template.replace(old, new)
+
+    start = template.index("class Component extends DCLogic {")
+    end = template.index("</script>", start)
+    return template[:start] + CONTACT_COMPONENT_SCRIPT.strip() + "\n" + template[end:]
+
+
 def patch_template(template: str, page: str, lang: str) -> str:
     template = fix_contact_email(template)
     template = set_default_locale(template, lang)
@@ -926,6 +1046,7 @@ def patch_template(template: str, page: str, lang: str) -> str:
         template = fix_dossier_links(template, page)
     if page == "contact.html":
         template = fix_dossier_links(template, page)
+        template = fix_contact_form(template)
     if page == "fleur.html":
         template = apply_fleur_gallery(template)
     if page == "windows.html":

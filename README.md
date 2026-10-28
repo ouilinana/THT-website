@@ -32,6 +32,8 @@ Public contact email: `compagnie.tht@gmail.com`.
 
 Home newsletter block posts to `POST /api/subscribe`. Docker runs Caddy + Python API on `127.0.0.1:8000`.
 
+The contact page form posts JSON to `POST /api/contact`. Each message is saved to Notion (`NOTION_CONTACT_DATABASE_ID`, or `NOTION_DATABASE_ID` if unset) and emailed to `NOTIFY_TO` with Reply-To set to the sender. The request succeeds if either Notion or email works.
+
 See `.env.example` for Notion + Infomaniak SMTP variables.
 
 ## Deploy

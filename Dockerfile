@@ -12,7 +12,7 @@ RUN chmod +x /start.sh
 COPY *.html /srv/
 COPY en /srv/en/
 COPY assets /srv/assets/
-COPY sitemap.xml robots.txt /srv/
+COPY sitemap.xml robots.txt llms.txt /srv/
 
 EXPOSE 8080
 CMD ["/start.sh"]
