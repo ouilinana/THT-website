@@ -80,12 +80,32 @@ class SubscribeIntegrationTests(unittest.TestCase):
         os.environ["SMTP_USER"] = "user"
         os.environ["SMTP_PASS"] = "pass"
         os.environ["NOTIFY_TO"] = "notify@example.com"
+        os.environ["RESEND_API_KEY"] = ""
 
         inp = SubscribeInput("Marie", "marie@example.com", "Lyon", "", True, "", "fr", "10.0.0.1")
         r = subscribe(inp)
         self.assertTrue(r.ok)
         mock_client.create_contact.assert_called_once()
         mock_mail.assert_called_once()
+
+    @patch.dict(
+        os.environ,
+        {"NOTION_TOKEN": "secret", "NOTION_DATABASE_ID": "db", "SUBSCRIBE_TEST_MODE": "",
+         "RESEND_API_KEY": "re_test"},
+        clear=False,
+    )
+    @patch("api.subscribe_service.NotionClient")
+    @patch("api.subscribe_service.send_notification", side_effect=OSError(101, "Network unreachable"))
+    def test_signup_ok_when_notification_fails(self, mock_send, mock_notion_cls):
+        mock_client = MagicMock()
+        mock_notion_cls.return_value = mock_client
+        mock_client.load_schema.return_value = {"Name": {"type": "title"}, "Email": {"type": "email"}}
+        mock_client.find_by_email.return_value = False
+        inp = SubscribeInput("Marie", "marie2@example.com", "", "", True, "", "fr", "10.0.0.9")
+        r = subscribe(inp)
+        self.assertTrue(r.ok)
+        mock_send.assert_called_once()
+        self.assertEqual(mock_send.call_args.kwargs["reply_to"], "marie2@example.com")
 
     @patch.dict(
         os.environ,

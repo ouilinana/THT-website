@@ -1,21 +1,22 @@
-"""Newsletter subscribe: Notion CRM + SMTP notification."""
+"""Newsletter subscribe: Notion CRM + email notification (Resend or SMTP)."""
 
 from __future__ import annotations
 
 import json
 import os
 import re
-import smtplib
-import ssl
+import sys
 import time
 import urllib.error
 import urllib.request
 from collections import defaultdict
 from dataclasses import dataclass
-from email.message import EmailMessage
 from typing import Any
 
+from api.mailer import backend, send_notification
+
 NOTION_VERSION = "2022-06-28"
+NOTION_TIMEOUT = 10  # seconds
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 # In-memory rate limit: IP -> list of timestamps
@@ -68,7 +69,7 @@ class NotionClient:
                 "Content-Type": "application/json",
             },
         )
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=NOTION_TIMEOUT) as resp:
             return json.loads(resp.read().decode())
 
     def load_schema(self) -> dict[str, dict[str, Any]]:
@@ -195,28 +196,21 @@ def validate(inp: SubscribeInput) -> SubscribeResult | None:
     return None
 
 
-def send_notify_email(inp: SubscribeInput, cfg: dict[str, str]) -> None:
-    msg = EmailMessage()
-    msg["Subject"] = f"[THT Newsletter] {inp.name.strip()}"
-    msg["From"] = cfg["smtp_from"]
-    msg["To"] = cfg["notify_to"]
-    body = (
+def build_notify_text(inp: SubscribeInput) -> tuple[str, str]:
+    subject = f"[THT Newsletter] {inp.name.strip()}"
+    text = (
         f"New newsletter signup ({inp.lang})\n\n"
         f"Name: {inp.name.strip()}\n"
         f"Email: {inp.email.strip()}\n"
-        f"City: {inp.city.strip() or '—'}\n"
-        f"Organisation: {inp.organisation.strip() or '—'}\n"
+        f"City: {inp.city.strip() or '-'}\n"
+        f"Organisation: {inp.organisation.strip() or '-'}\n"
     )
-    msg.set_content(body)
+    return subject, text
 
-    port = int(cfg.get("smtp_port", "465"))
-    host = cfg["smtp_host"]
-    user = cfg["smtp_user"]
-    password = cfg["smtp_pass"]
-    context = ssl.create_default_context()
-    with smtplib.SMTP_SSL(host, port, context=context, timeout=30) as smtp:
-        smtp.login(user, password)
-        smtp.send_message(msg)
+
+def send_notify_email(inp: SubscribeInput) -> None:
+    subject, text = build_notify_text(inp)
+    send_notification(subject=subject, text=text, reply_to=inp.email.strip())
 
 
 def subscribe(inp: SubscribeInput, *, test_mode: bool = False) -> SubscribeResult:
@@ -246,17 +240,11 @@ def subscribe(inp: SubscribeInput, *, test_mode: bool = False) -> SubscribeResul
     props = build_notion_properties(schema, inp)
     notion.create_contact(props)
 
-    smtp_required = os.environ.get("SMTP_HOST", "")
-    if smtp_required:
-        cfg = {
-            "smtp_host": os.environ["SMTP_HOST"],
-            "smtp_port": os.environ.get("SMTP_PORT", "465"),
-            "smtp_user": os.environ.get("SMTP_USER", ""),
-            "smtp_pass": os.environ.get("SMTP_PASS", ""),
-            "smtp_from": os.environ.get("SMTP_FROM", ""),
-            "notify_to": os.environ.get("NOTIFY_TO", "compagnie.tht@gmail.com"),
-        }
-        if cfg["smtp_from"] and cfg["smtp_user"]:
-            send_notify_email(inp, cfg)
+    if backend():
+        # The contact is already saved in Notion; a failed notification must not fail the signup.
+        try:
+            send_notify_email(inp)
+        except Exception as exc:  # noqa: BLE001
+            sys.stderr.write(f"[subscribe] notification failed: {exc!r}\n")
 
     return SubscribeResult(True, "ok", "Subscribed", duplicate=False)
