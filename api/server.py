@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
-"""HTTP server for POST /api/subscribe (WSGI-style, stdlib only)."""
+"""HTTP server for POST /api/subscribe and POST /api/contact (stdlib only)."""
 
 from __future__ import annotations
 
-import cgi
-import io
 import json
 import os
 import sys
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from email.parser import BytesParser
+from email.policy import HTTP
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
+from api.contact_service import ContactInput, handle_contact  # noqa: E402
 from api.subscribe_service import SubscribeInput, subscribe  # noqa: E402
 
 
@@ -30,21 +31,17 @@ def _parse_body(content_type: str, body: bytes) -> dict[str, str]:
         data = json.loads(body.decode("utf-8") or "{}")
         return {k: str(v) for k, v in data.items()}
     if "multipart/form-data" in content_type:
-        environ = {
-            "REQUEST_METHOD": "POST",
-            "CONTENT_TYPE": content_type,
-            "CONTENT_LENGTH": str(len(body)),
-        }
-        fs = cgi.FieldStorage(
-            fp=io.BytesIO(body), environ=environ, keep_blank_values=True
+        # cgi.FieldStorage was removed in Python 3.13; parse with the email package.
+        msg = BytesParser(policy=HTTP).parsebytes(
+            b"Content-Type: " + content_type.encode("latin-1") + b"\r\n\r\n" + body
         )
         out: dict[str, str] = {}
-        for key in fs.keys():
-            field = fs[key]
-            if isinstance(field, list):
-                out[key] = field[0].value if field else ""
-            else:
-                out[key] = field.value or ""
+        for part in msg.iter_parts():
+            key = part.get_param("name", header="content-disposition")
+            if not key or key in out:
+                continue
+            payload = part.get_payload(decode=True) or b""
+            out[key] = payload.decode(part.get_content_charset() or "utf-8", "replace")
         return out
     # application/x-www-form-urlencoded
     parsed = parse_qs(body.decode("utf-8"), keep_blank_values=True)
@@ -72,19 +69,42 @@ class Handler(BaseHTTPRequestHandler):
             return
         self.send_error(404)
 
+    def _read_fields(self) -> dict[str, str]:
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        body = self.rfile.read(min(length, 64 * 1024))
+        ctype = self.headers.get("Content-Type", "")
+        try:
+            return _parse_body(ctype, body)
+        except (json.JSONDecodeError, ValueError, AttributeError):
+            return {}
+
+    def _client(self) -> str:
+        return _client_ip(
+            {
+                "X-Forwarded-For": self.headers.get("X-Forwarded-For", ""),
+                "Remote-Addr": self.client_address[0],
+            }
+        )
+
+    def _send_json(self, status: int, payload: dict) -> None:
+        data = json.dumps(payload).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(data)
+
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
+        if parsed.path.rstrip("/") == "/api/contact":
+            self._handle_contact()
+            return
         if parsed.path != "/api/subscribe":
             self.send_error(404)
             return
 
-        length = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(length)
-        ctype = self.headers.get("Content-Type", "")
-        try:
-            fields = _parse_body(ctype, body)
-        except (json.JSONDecodeError, ValueError):
-            fields = {}
+        fields = self._read_fields()
 
         inp = SubscribeInput(
             name=fields.get("name", ""),
@@ -94,12 +114,7 @@ class Handler(BaseHTTPRequestHandler):
             consent=fields.get("consent", "") in ("1", "true", "on", "yes"),
             honeypot=fields.get("company_website", "") or fields.get("website", ""),
             lang=fields.get("lang", "fr"),
-            client_ip=_client_ip(
-                {
-                    "X-Forwarded-For": self.headers.get("X-Forwarded-For", ""),
-                    "Remote-Addr": self.client_address[0],
-                }
-            ),
+            client_ip=self._client(),
         )
 
         test_mode = os.environ.get("SUBSCRIBE_TEST_MODE", "") == "1"
@@ -122,11 +137,34 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Location", loc)
         self.end_headers()
 
+    def _handle_contact(self) -> None:
+        fields = self._read_fields()
+        inp = ContactInput(
+            name=fields.get("name", ""),
+            email=fields.get("email", ""),
+            organisation=fields.get("organisation", ""),
+            topic=fields.get("topic", ""),
+            message=fields.get("message", ""),
+            lang=fields.get("lang", "fr"),
+            honeypot=fields.get("company_website", "") or fields.get("website", ""),
+            client_ip=self._client(),
+        )
+        try:
+            result = handle_contact(inp)
+        except Exception as exc:  # noqa: BLE001 - always answer the browser with JSON
+            sys.stderr.write(f"[contact] unexpected error: {exc!r}\n")
+            self._send_json(500, {"ok": False, "code": "server", "message": "Server error"})
+            return
+        status = 200 if result.ok else (429 if result.code == "rate_limit" else 400)
+        if result.code in ("config", "delivery"):
+            status = 502
+        self._send_json(status, {"ok": result.ok, "code": result.code, "message": result.message})
+
 
 def main() -> None:
     host = os.environ.get("SUBSCRIBE_BIND", "127.0.0.1")
     port = int(os.environ.get("SUBSCRIBE_PORT", "8000"))
-    HTTPServer((host, port), Handler).serve_forever()
+    ThreadingHTTPServer((host, port), Handler).serve_forever()
 
 
 if __name__ == "__main__":
